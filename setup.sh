@@ -79,13 +79,20 @@ else
     VAULT_PATH=${REPLY/#\~/$HOME}
     [ -n "$VAULT_PATH" ] || die "a vault path is required (or set WCOB_VAULT later)."
     [ -d "$VAULT_PATH" ] || die "no such directory: $VAULT_PATH"
-    cat > "$CONFIG_DIR/config.toml" <<EOF
-# wechat-claude-obsidian-bot configuration.
-# All settings + defaults: see config.py in the repo, or the seeded
-# template comments. Env vars (WCOB_VAULT, ...) override this file.
+    # Single source of truth: the packaged template, with vault filled in.
+    "$VENV/bin/python" - "$VAULT_PATH" > "$CONFIG_DIR/config.toml" <<'PY'
+import sys
 
-vault = "$VAULT_PATH"
-EOF
+vault = sys.argv[1]
+try:
+    from wechat_claude_obsidian_bot.config import CONFIG_SEED as seed
+except ImportError:  # older package without the packaged template
+    seed = '# wechat-claude-obsidian-bot configuration — see config.py for all settings.\n# vault = "~/Notes"\n'
+out = seed.replace('# vault = "~/Notes"', f'vault = "{vault}"')
+if f'vault = "{vault}"' not in out:
+    out += f'\nvault = "{vault}"\n'
+print(out, end="")
+PY
     echo "OK: wrote $CONFIG_DIR/config.toml (vault = $VAULT_PATH)"
 fi
 
