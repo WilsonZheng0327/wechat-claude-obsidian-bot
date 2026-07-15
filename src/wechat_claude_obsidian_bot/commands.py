@@ -9,34 +9,27 @@ from .config import CREDS, MAX_MEDIA_MB, PROMPT, SESSION_WINDOW_MINUTES, SETTING
 
 
 def status_text(lang: str) -> str:
-    from .media_in import _whisper_model_cached
-
     cfg = settings.load()
     left = session.remaining_seconds()
-    asr_cached = _whisper_model_cached()
     if lang == "zh":
         sess = f"进行中，还剩 {left / 60:.0f} 分钟（/new 重置）" if left else "无"
-        asr = "已下载" if asr_cached else "未下载（首条无转写语音时下载）"
         return (
             f"模型: {cfg['model']}\n"
             f"语言: {cfg['language']}\n"
             f"笔记库: {VAULT}\n"
             f"会话: {sess}（窗口 {SESSION_WINDOW_MINUTES} 分钟）\n"
             f"媒体上限: {MAX_MEDIA_MB} MB\n"
-            f"本地语音识别模型: {asr}\n"
             f"提示词: {PROMPT}\n"
             f"设置: {SETTINGS}\n"
             f"凭据: {CREDS}"
         )
     sess = f"active, {left / 60:.0f} min left (/new to reset)" if left else "none"
-    asr = "downloaded" if asr_cached else "not downloaded yet (fetched on first untranscribed voice note)"
     return (
         f"model: {cfg['model']}\n"
         f"language: {cfg['language']}\n"
         f"vault: {VAULT}\n"
         f"session: {sess} (window {SESSION_WINDOW_MINUTES} min)\n"
         f"media cap: {MAX_MEDIA_MB} MB\n"
-        f"local ASR model: {asr}\n"
         f"prompt: {PROMPT}\n"
         f"settings: {SETTINGS}\n"
         f"creds: {CREDS}"

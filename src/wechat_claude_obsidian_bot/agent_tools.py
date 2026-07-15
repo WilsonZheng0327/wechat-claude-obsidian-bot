@@ -29,7 +29,7 @@ def _text(text: str) -> dict:
 @tool(
     "status",
     "Current bot configuration and session state: model, language, vault, "
-    "media size cap, local ASR availability, and config file locations. "
+    "media size cap, and config file locations. "
     "Same information as the user's /status command.",
     {},
 )

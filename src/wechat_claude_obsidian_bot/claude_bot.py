@@ -17,7 +17,7 @@ from weixin_ilink import WeixinBot
 
 from . import agent_tools, commands, preflight, session, settings
 from .config import MAX_MEDIA_MB, PROMPT, SETTINGS, require_creds, require_vault
-from .media_in import MediaTooLarge, save_file, save_image, transcribe_voice
+from .media_in import MediaTooLarge, save_file, save_image
 from .settings import tr
 
 
@@ -164,24 +164,12 @@ def main() -> None:
 
     @bot.on_voice
     def on_voice(msg):
+        # msg.text is WeChat's own ASR transcript; without it there's no audio
+        # path — we don't transcribe locally.
         if msg.text:
             handle(msg, f"(voice transcript) {msg.text}")
-            return
-        msg.reply_typing()
-        transcript = None
-        try:
-            transcript = transcribe_voice(msg)
-        except Exception:
-            traceback.print_exc()
-        lang = settings.load()["language"]
-        if transcript:
-            handle(
-                msg,
-                f"(voice transcript from local ASR, likely has errors) {transcript}",
-                note=tr("asr_note", lang),
-            )
         else:
-            msg.reply_text(tr("no_transcript", lang))
+            msg.reply_text(tr("no_transcript", settings.load()["language"]))
 
     @bot.on_image
     def on_image(msg):

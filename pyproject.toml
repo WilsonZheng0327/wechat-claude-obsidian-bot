@@ -23,13 +23,6 @@ dependencies = [
     "claude-agent-sdk>=0.2",
 ]
 
-[project.optional-dependencies]
-# Local transcription fallback for voice messages WeChat didn't transcribe.
-voice = [
-    "weixin-ilink[voice]",
-    "faster-whisper>=1.0",
-]
-
 [project.urls]
 Repository = "https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
 

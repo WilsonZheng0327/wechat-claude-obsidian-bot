@@ -66,7 +66,6 @@ Or manually:
 ```sh
 pipx install git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot
 # from a checkout: pip install .
-# with local voice transcription (small Whisper model): pip install ".[voice]"
 ```
 
 Run `wcob` once — it creates a commented
@@ -91,7 +90,7 @@ anyone with that file can act as your bot — keep it private.
 | A link | Fetches it, writes a summary note. |
 | A question | Answers it (researching the web if needed) — no note unless it's worth keeping. |
 | "teach me X" | A short lesson built on your existing notes, then captures it as notes. |
-| Voice | Same, from WeChat's transcript (or local Whisper with the `[voice]` extra). |
+| Voice | Same, from WeChat's own transcript. If WeChat sends none, the bot asks you to type it — it doesn't transcribe audio itself. |
 | Image / file | Saves it in `<vault>/Wechat_Saved/`, views/reads it, writes a note embedding it. Media over `max_media_mb` (default 50) is refused. |
 | Video | Declined — the agent can't watch them. |
 
@@ -149,5 +148,5 @@ is notional (it draws on your plan's usage limits); with
 The bot's own state is tiny (`creds.json`, polling cursor, `session.json`).
 What grows: agent transcripts under `~/.claude/projects/` (Claude Code
 deletes them after 30 days by default) and `<vault>/Wechat_Saved/` (prune
-like any vault folder). The Whisper model (~250 MB) is a one-time download.
-Logs go to stdout — rotation is your process manager's job.
+like any vault folder). Logs go to stdout — rotation is your process
+manager's job.

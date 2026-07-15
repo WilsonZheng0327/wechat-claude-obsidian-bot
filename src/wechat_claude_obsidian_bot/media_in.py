@@ -1,14 +1,12 @@
-"""Incoming media: download images/files into the vault, transcribe voice.
+"""Incoming media: download images and files into the vault.
 
 Media lands in <vault>/Wechat_Saved/ so notes can embed it with ![[...]].
-Downloads are capped at MAX_MEDIA_MB (config). Voice transcription is a
-local-ASR fallback for when WeChat sends no transcript: SILK -> WAV via
-weixin-ilink's pilk helper, then faster-whisper (both optional deps —
-`pip install "wechat-claude-obsidian-bot[voice]"`).
+Downloads are capped at MAX_MEDIA_MB (config). Voice needs nothing here —
+claude_bot works from WeChat's own ASR transcript (msg.text), and a voice
+message without one is answered with a "please type it" reply.
 """
 
 import re
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -82,51 +80,3 @@ def save_file(msg, vault: Path) -> Path:
     path = _unique_path(vault, msg.file_name or "unnamed")
     path.write_bytes(data)
     return path
-
-
-_whisper_model = None
-_WHISPER_SIZE = "small"
-
-
-def _whisper_model_cached() -> bool:
-    """True if the model is already on disk (no download needed).
-
-    Uses faster-whisper's own resolver so we check exactly the files the
-    loader needs — the repo holds extra files (README etc.) that are never
-    downloaded, so a bare snapshot_download check would always say no.
-    """
-    try:
-        from faster_whisper.utils import download_model
-
-        download_model(_WHISPER_SIZE, local_files_only=True)
-        return True
-    except Exception:
-        return False
-
-
-def transcribe_voice(msg) -> str | None:
-    """Local ASR fallback. Returns None when the optional deps are missing."""
-    global _whisper_model
-    try:
-        from faster_whisper import WhisperModel
-        from weixin_ilink.voice import silk_to_wav
-    except ImportError as err:
-        print(f"[claude-bot] local ASR unavailable: {err}", flush=True)
-        return None
-
-    data = _fetch(msg)
-    with tempfile.TemporaryDirectory() as tmp:
-        silk = Path(tmp) / "voice.silk"
-        silk.write_bytes(data)
-        wav = Path(tmp) / "voice.wav"
-        silk_to_wav(silk, wav)
-        if _whisper_model is None:
-            if not _whisper_model_cached():
-                from .settings import load, tr
-
-                msg.reply_text(tr("whisper_download", load()["language"]))
-            print("[claude-bot] loading whisper model (first voice message)...", flush=True)
-            _whisper_model = WhisperModel(_WHISPER_SIZE, device="cpu", compute_type="int8")
-        segments, _ = _whisper_model.transcribe(str(wav))
-        text = "".join(segment.text for segment in segments).strip()
-    return text or None

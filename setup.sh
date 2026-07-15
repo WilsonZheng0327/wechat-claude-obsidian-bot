@@ -26,6 +26,20 @@ ask()  { # ask "prompt" "default" -> REPLY
     fi
     REPLY=${REPLY:-$default}
 }
+# macOS ships bash 3.2, so no ${REPLY,,} — match case-insensitively by hand.
+is_yes() { case "${REPLY-}" in [Yy]|[Yy][Ee][Ss]) return 0 ;; *) return 1 ;; esac; }
+
+# `timeout` is GNU coreutils: absent on macOS, gtimeout with homebrew's.
+# Missing it must not be fatal — the </dev/null on each claude call is what
+# actually stops `claude auth status` grabbing the TTY; timeout is a backstop.
+if command -v timeout >/dev/null; then   TIMEOUT=timeout
+elif command -v gtimeout >/dev/null; then TIMEOUT=gtimeout
+else                                      TIMEOUT=
+fi
+run_timeout() { # run_timeout <secs> cmd...
+    local secs=$1; shift
+    if [ -n "$TIMEOUT" ]; then "$TIMEOUT" -k 5 "$secs" "$@"; else "$@"; fi
+}
 
 # --- 1. python --------------------------------------------------------------
 say "Checking Python"
@@ -39,18 +53,18 @@ say "Checking Claude Code CLI"
 if ! command -v claude >/dev/null; then
     echo "The agent runs through the Claude Code CLI, which isn't installed."
     ask "Install it now via the official installer (curl | bash)?" "y"
-    if [ "${REPLY,,}" = "y" ]; then
+    if is_yes; then
         curl -fsSL https://claude.ai/install.sh | bash
         command -v claude >/dev/null || die "claude still not on PATH — open a new shell and re-run ./setup.sh"
     else
         die "install it from https://code.claude.com, then re-run ./setup.sh"
     fi
 fi
-echo "OK: $(timeout 15 claude --version </dev/null 2>/dev/null || echo claude found)"
+echo "OK: $(run_timeout 15 claude --version </dev/null 2>/dev/null || echo claude found)"
 
 # </dev/null matters: with the terminal on stdin, `claude auth status` grabs
 # the TTY and never exits (and shrugs off timeout's SIGTERM, hence -k).
-if timeout -k 5 30 claude auth status --json </dev/null 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
+if run_timeout 30 claude auth status --json </dev/null 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
     echo "OK: Claude CLI is logged in"
 elif [ -n "${ANTHROPIC_API_KEY-}" ]; then
     echo "OK: ANTHROPIC_API_KEY is set (API billing)"
@@ -64,9 +78,7 @@ fi
 # --- 3. install the package --------------------------------------------------
 say "Installing $APP into $VENV"
 [ -d "$VENV" ] || python3 -m venv "$VENV"
-ask "Include local voice transcription (faster-whisper, ~250 MB model on first voice note)?" "y"
-if [ "${REPLY,,}" = "y" ]; then EXTRAS="[voice]"; else EXTRAS=""; fi
-"$VENV/bin/pip" install -q -e ".$EXTRAS" || "$VENV/bin/pip" install -q -e "."
+"$VENV/bin/pip" install -q -e .
 [ -x "$VENV/bin/wcob" ] || die "install finished but $VENV/bin/wcob is missing"
 echo "OK: wcob installed (subcommands: run, login, echo)"
 
@@ -81,7 +93,7 @@ if grep -q "alias wcob=" "$RC" 2>/dev/null; then
     WCOB=wcob
 else
     ask "Add a wcob alias to $RC?" "y"
-    if [ "${REPLY,,}" = "y" ]; then
+    if is_yes; then
         printf '\n# wechat-claude-obsidian-bot\nalias wcob=%s\n' "'$PWD/$VENV/bin/wcob'" >> "$RC"
         echo "OK: added the alias to $RC (applies in new shells, or \`source $RC\`)"
         WCOB=wcob
@@ -130,7 +142,7 @@ fi
 say "Autostart (optional)"
 if command -v systemctl >/dev/null && [ -t 0 ]; then
     ask "Install a systemd user service so the bot runs in the background?" "n"
-    if [ "${REPLY,,}" = "y" ]; then
+    if is_yes; then
         UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
         mkdir -p "$UNIT_DIR"
         cat > "$UNIT_DIR/wcob.service" <<EOF

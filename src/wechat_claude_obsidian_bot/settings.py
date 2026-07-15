@@ -73,25 +73,14 @@ STRINGS = {
     },
     "image": {"en": "image", "zh": "图片"},
     "file": {"en": "file", "zh": "文件"},
-    "voice": {"en": "voice note", "zh": "语音"},
-    "asr_note": {
-        "en": "Transcribed locally — plain text or WeChat's own voice-to-text is more reliable.",
-        "zh": "这是本地转写的——直接发文字或用微信自带的语音转文字更可靠。",
-    },
     "no_transcript": {
-        "en": "No transcript came through and local transcription failed — "
-              "mind typing it? Plain text or WeChat's voice-to-text works best.",
-        "zh": "没收到转写文本，本地转写也失败了——能打字发一下吗？"
-              "直接发文字或用微信的语音转文字最稳。",
+        "en": "WeChat didn't send a transcript for that one — mind typing it? "
+              "Shorter voice notes usually come through.",
+        "zh": "微信没给这条语音的转写文本——能打字发一下吗？语音短一点通常就能转出来。",
     },
     "no_video": {
         "en": "I can't watch videos, so I don't capture them — a screenshot or a few words works.",
         "zh": "我看不了视频，所以不收录——发张截图或几句话描述就行。",
-    },
-    "whisper_download": {
-        "en": "First voice note — downloading the speech-recognition model (~250 MB), "
-              "so this one will take a few minutes. It's a one-time thing.",
-        "zh": "第一条语音——正在下载语音识别模型（约 250 MB），这条会慢几分钟，只需下载一次。",
     },
 }
 
