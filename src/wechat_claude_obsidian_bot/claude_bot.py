@@ -61,7 +61,22 @@ async def run_agent(prompt: str, options: ClaudeAgentOptions) -> tuple[str, str 
     return result_text, session_id
 
 
+# Granted only when the vault is already a git repo (we never init one).
+# Scoped rules: every other shell command stays denied in headless runs.
+GIT_TOOLS = [
+    "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
+    "Bash(git add:*)", "Bash(git commit:*)", "Bash(git push:*)",
+    "Bash(git pull:*)",
+]
+
+
 def build_options(vault, cfg: dict, resume: str | None = None, msg=None) -> ClaudeAgentOptions:
+    git_tools = GIT_TOOLS if (vault / ".git").exists() else []
+    git_note = (
+        " The vault is a git repo: you may run git (status/diff/log/add/"
+        "commit/push/pull) to commit or sync it when the user asks."
+        if git_tools else ""
+    )
     reply_lang = "Chinese (中文)" if cfg["language"] == "zh" else "English"
     footer = (
         f"Write your final reply in {reply_lang}.\n\n"
@@ -74,7 +89,7 @@ def build_options(vault, cfg: dict, resume: str | None = None, msg=None) -> Clau
         f"the wcob reset_session tool when the user asks to start over, and the "
         f"wcob send_file / send_image tools to send a vault file or image to "
         f"the user's phone. The user can also type /status, /new, or /help — "
-        f"the bot answers those itself, instantly and free.)"
+        f"the bot answers those itself, instantly and free.{git_note})"
     )
     return ClaudeAgentOptions(
         cwd=vault,
@@ -85,7 +100,7 @@ def build_options(vault, cfg: dict, resume: str | None = None, msg=None) -> Clau
         },
         setting_sources=["project"],  # load the vault's CLAUDE.md conventions
         allowed_tools=["Read", "Write", "Edit", "Grep", "Glob", "WebFetch", "WebSearch",
-                       *agent_tools.ALLOWED_TOOLS],
+                       *git_tools, *agent_tools.ALLOWED_TOOLS],
         mcp_servers={"wcob": agent_tools.server(msg=msg, vault=vault)},
         permission_mode="acceptEdits",
         model=None if cfg["model"] == "default" else cfg["model"],

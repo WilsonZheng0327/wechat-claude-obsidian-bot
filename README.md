@@ -113,6 +113,11 @@ you on?", "start over") — at the cost of a run. It can also send vault
 content back with its `send_file`/`send_image` tools: "send me the Docker
 note as a file", "show me that diagram from last week".
 
+If the vault is already a git repo, the agent may also run git in it
+(status/diff/log/add/commit/push/pull) — "commit my vault", "push my
+notes". Pushing needs non-interactive auth (an SSH key or a credential
+helper); the bot never turns a plain folder into a repo itself.
+
 ## Customizing
 
 The agent's standing instructions live in
