@@ -158,7 +158,12 @@ say "Done"
 if systemctl --user is-active wcob.service >/dev/null 2>&1; then
     echo "The bot is running. Message it on WeChat to test — try /status."
 else
-    echo "Start the bot with:  $WCOB"
+    if [ "$WCOB" = wcob ]; then
+        echo "Open a new shell (or \`source $RC\`) so the alias applies,"
+        echo "then start the bot with:  wcob"
+    else
+        echo "Start the bot with:  $WCOB"
+    fi
     echo "(it re-checks the Claude CLI and login on every start)"
     echo "Then message it on WeChat — try /status."
 fi
