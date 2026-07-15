@@ -2,7 +2,8 @@
 
 Resolution order for each setting: environment variable, then config.toml,
 then default. config.toml is searched at $WCOB_CONFIG, then
-$XDG_CONFIG_HOME/wechat-claude-obsidian-bot/config.toml.
+$XDG_CONFIG_HOME/wechat-claude-obsidian-bot/config.toml; if neither exists,
+a commented template is seeded at the latter path on first run.
 
 Settings:
   vault  (env WCOB_VAULT)  — Obsidian vault the agent works in. Required.
@@ -30,18 +31,6 @@ import os
 import sys
 import tomllib
 from pathlib import Path
-
-
-def _migrate_legacy_dir(base: Path) -> None:
-    """One-time move from the project's pre-rename (wechat-claude-bot) dirs."""
-    old, new = base / "wechat-claude-bot", base / "wechat-claude-obsidian-bot"
-    if old.is_dir() and not new.exists():
-        old.rename(new)
-        print(f"migrated {old} -> {new}", flush=True)
-
-
-_migrate_legacy_dir(Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")))
-_migrate_legacy_dir(Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")))
 
 
 def _config_file() -> Path | None:
@@ -104,11 +93,55 @@ SESSION_WINDOW_MINUTES = _int_setting(
 )
 
 
+CONFIG_SEED = """\
+# wechat-claude-obsidian-bot configuration. Env vars (WCOB_VAULT, ...)
+# override these — see config.py. Paths may use ~.
+
+# The Obsidian vault (or any Markdown folder) the agent reads and writes.
+# Required — uncomment and point it at yours.
+# vault = "~/Notes"
+
+# Where the iLink login credentials live (created by wcob-login); the
+# polling cursor and session state are stored alongside.
+# creds = "~/.local/share/wechat-claude-obsidian-bot/creds.json"
+
+# The agent's standing instructions, seeded on first run. Edit freely —
+# the bot also updates it itself when you message it a standing
+# preference ("from now on, ...").
+# prompt = "~/.config/wechat-claude-obsidian-bot/prompt.md"
+
+# Runtime settings (Claude model, reply language) — a small TOML file the
+# bot edits itself when you message it "switch to haiku" / "说中文".
+# settings = "~/.config/wechat-claude-obsidian-bot/settings.toml"
+
+# Refuse to download incoming media (images/files/voice) larger than this.
+# max_media_mb = 50
+
+# Messages arriving within this many minutes of the previous one continue
+# the same agent session, so the bot remembers what you just sent
+# (an image, a note it filed). 0 = every message starts fresh.
+# session_window_minutes = 15
+"""
+
+
 def require_vault() -> Path:
     if VAULT is None:
+        path = _config_file()
+        if path is None:
+            path = (
+                Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+                / "wechat-claude-obsidian-bot"
+                / "config.toml"
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(CONFIG_SEED, encoding="utf-8")
+            sys.exit(
+                f"No vault configured. I created {path} — "
+                "uncomment `vault` there and point it at your vault "
+                "(or set WCOB_VAULT), then run this again."
+            )
         sys.exit(
-            "No vault configured. Set WCOB_VAULT or put vault = \"/path/to/vault\" "
-            "in config.toml (see config.example.toml)."
+            f"No vault configured. Set `vault` in {path} or export WCOB_VAULT."
         )
     if not VAULT.is_dir():
         sys.exit(f"Configured vault does not exist: {VAULT}")
