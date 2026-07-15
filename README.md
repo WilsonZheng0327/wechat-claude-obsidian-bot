@@ -75,9 +75,9 @@ documented there); set `vault` to your vault's path (or just
 `export WCOB_VAULT=~/YourVault`). Then:
 
 ```sh
-wcob-login  # scan the QR with the phone that has ClawBot enabled
+wcob login  # scan the QR with the phone that has ClawBot enabled
 wcob        # run the bot (checks your Claude CLI login at startup)
-wcob-echo   # plumbing test without Claude — just echoes
+wcob echo   # plumbing test without Claude — just echoes
 ```
 
 Credentials land in `~/.local/share/wechat-claude-obsidian-bot/creds.json`;

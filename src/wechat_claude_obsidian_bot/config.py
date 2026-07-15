@@ -101,7 +101,7 @@ CONFIG_SEED = """\
 # Required — uncomment and point it at yours.
 # vault = "~/Notes"
 
-# Where the iLink login credentials live (created by wcob-login); the
+# Where the iLink login credentials live (created by `wcob login`); the
 # polling cursor and session state are stored alongside.
 # creds = "~/.local/share/wechat-claude-obsidian-bot/creds.json"
 

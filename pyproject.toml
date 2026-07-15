@@ -34,9 +34,7 @@ voice = [
 Repository = "https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
 
 [project.scripts]
-wcob = "wechat_claude_obsidian_bot.claude_bot:main"
-wcob-login = "wechat_claude_obsidian_bot.login:main"
-wcob-echo = "wechat_claude_obsidian_bot.echo_bot:main"
+wcob = "wechat_claude_obsidian_bot.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

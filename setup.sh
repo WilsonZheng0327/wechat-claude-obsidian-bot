@@ -68,7 +68,25 @@ ask "Include local voice transcription (faster-whisper, ~250 MB model on first v
 if [ "${REPLY,,}" = "y" ]; then EXTRAS="[voice]"; else EXTRAS=""; fi
 "$VENV/bin/pip" install -q -e ".$EXTRAS" || "$VENV/bin/pip" install -q -e "."
 [ -x "$VENV/bin/wcob" ] || die "install finished but $VENV/bin/wcob is missing"
-echo "OK: wcob, wcob-login, wcob-echo installed"
+echo "OK: wcob installed (subcommands: run, login, echo)"
+
+# Optional: plain `wcob` instead of the full venv path, via a shell alias.
+WCOB=$PWD/$VENV/bin/wcob
+case "$(basename "${SHELL:-bash}")" in
+    zsh) RC="$HOME/.zshrc" ;;
+    *)   RC="$HOME/.bashrc" ;;
+esac
+if grep -q "alias wcob=" "$RC" 2>/dev/null; then
+    echo "OK: wcob alias already in $RC"
+    WCOB=wcob
+else
+    ask "Add a wcob alias to $RC?" "y"
+    if [ "${REPLY,,}" = "y" ]; then
+        printf '\n# wechat-claude-obsidian-bot\nalias wcob=%s\n' "'$PWD/$VENV/bin/wcob'" >> "$RC"
+        echo "OK: added the alias to $RC (applies in new shells, or \`source $RC\`)"
+        WCOB=wcob
+    fi
+fi
 
 # --- 4. config (vault path) --------------------------------------------------
 say "Configuring"
@@ -101,11 +119,11 @@ fi
 # --- 5. WeChat pairing ---------------------------------------------------
 say "WeChat pairing"
 if [ -f "$DATA_DIR/creds.json" ]; then
-    echo "OK: already paired ($DATA_DIR/creds.json). Run $VENV/bin/wcob-login to re-pair."
+    echo "OK: already paired ($DATA_DIR/creds.json). Run \`$WCOB login\` to re-pair."
 else
     echo "Enable the plugin on your phone first: WeChat 设置 → 插件 → 微信ClawBot,"
     echo "then scan the QR code that appears below."
-    "$VENV/bin/wcob-login"
+    "$VENV/bin/wcob" login
 fi
 
 # --- 6. optional systemd user service ----------------------------------------
@@ -140,7 +158,7 @@ say "Done"
 if systemctl --user is-active wcob.service >/dev/null 2>&1; then
     echo "The bot is running. Message it on WeChat to test — try /status."
 else
-    echo "Start the bot with:  $PWD/$VENV/bin/wcob"
+    echo "Start the bot with:  $WCOB"
     echo "(it re-checks the Claude CLI and login on every start)"
     echo "Then message it on WeChat — try /status."
 fi
