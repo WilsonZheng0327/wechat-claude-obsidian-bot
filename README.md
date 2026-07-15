@@ -51,15 +51,28 @@ How a message travels:
 
 ## Setup
 
+The quick way — clone and run the guided installer. It checks Python and
+the Claude CLI (offering to install/log in), installs the package into
+`./.venv`, writes your config, runs the QR pairing, and can set up a
+systemd user service. Idempotent; re-run it anytime:
+
+```sh
+git clone https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot
+cd wechat-claude-obsidian-bot && ./setup.sh
+```
+
+Or manually:
+
 ```sh
 pipx install git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot
 # from a checkout: pip install .
 # with local voice transcription (small Whisper model): pip install ".[voice]"
 ```
 
-Point it at your vault — `export WCOB_VAULT=~/YourVault`, or copy
-`config.example.toml` to `~/.config/wechat-claude-obsidian-bot/config.toml`
-and edit it (every setting is documented there). Then:
+Run `wcob` once — it creates a commented
+`~/.config/wechat-claude-obsidian-bot/config.toml` (every setting is
+documented there); set `vault` to your vault's path (or just
+`export WCOB_VAULT=~/YourVault`). Then:
 
 ```sh
 wcob-login  # scan the QR with the phone that has ClawBot enabled
