@@ -79,7 +79,13 @@ else
     VAULT_PATH=${REPLY/#\~/$HOME}
     [ -n "$VAULT_PATH" ] || die "a vault path is required (or set WCOB_VAULT later)."
     [ -d "$VAULT_PATH" ] || die "no such directory: $VAULT_PATH"
-    sed "s|^vault = .*|vault = \"$VAULT_PATH\"|" config.example.toml > "$CONFIG_DIR/config.toml"
+    cat > "$CONFIG_DIR/config.toml" <<EOF
+# wechat-claude-obsidian-bot configuration.
+# All settings + defaults: see config.py in the repo, or the seeded
+# template comments. Env vars (WCOB_VAULT, ...) override this file.
+
+vault = "$VAULT_PATH"
+EOF
     echo "OK: wrote $CONFIG_DIR/config.toml (vault = $VAULT_PATH)"
 fi
 
