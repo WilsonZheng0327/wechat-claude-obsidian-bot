@@ -27,8 +27,11 @@ def run() -> None:
         )
 
     try:
+        # stdin must not be the terminal: `claude auth status` grabs a TTY
+        # on stdin and never exits.
         status = subprocess.run(
             [exe, "auth", "status", "--json"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=30,

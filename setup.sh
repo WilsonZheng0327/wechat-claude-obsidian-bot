@@ -46,9 +46,11 @@ if ! command -v claude >/dev/null; then
         die "install it from https://code.claude.com, then re-run ./setup.sh"
     fi
 fi
-echo "OK: $(timeout 15 claude --version 2>/dev/null || echo claude found)"
+echo "OK: $(timeout 15 claude --version </dev/null 2>/dev/null || echo claude found)"
 
-if timeout 30 claude auth status --json 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
+# </dev/null matters: with the terminal on stdin, `claude auth status` grabs
+# the TTY and never exits (and shrugs off timeout's SIGTERM, hence -k).
+if timeout -k 5 30 claude auth status --json </dev/null 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
     echo "OK: Claude CLI is logged in"
 elif [ -n "${ANTHROPIC_API_KEY-}" ]; then
     echo "OK: ANTHROPIC_API_KEY is set (API billing)"
