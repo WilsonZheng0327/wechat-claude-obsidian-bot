@@ -87,15 +87,16 @@ differ:
 | `settings.toml` | [settings.py](src/wechat_claude_obsidian_bot/settings.py) | re-read **every message** via `settings.load()` | user *or the agent itself* |
 | `prompt.md` | `load_capture_prompt()` | re-read **every message** | user *or the agent itself* |
 
-`settings.toml` holds only what must be machine-readable (`model` feeds
-`ClaudeAgentOptions`, `language` selects canned replies). Free-form standing
-instructions go in `prompt.md`, seeded on first run from the packaged
-`capture_prompt.md` / `capture_prompt.zh.md` per `language`. Both are re-read
-per message precisely so the agent can rewrite them mid-conversation ("switch
-to haiku", "from now on reply in Chinese") and have it apply to the next
-message. `build_options()` appends a footer telling the agent these files'
-paths and passes `add_dirs=[PROMPT.parent, SETTINGS.parent]` so it can edit
-them from outside the vault cwd.
+`settings.toml` holds only what must be machine-readable. It has **two model
+fields, one per backend** — `model` (Claude) and `api_model` (API, a
+`provider:model` string) — so switching backends never clobbers the other's
+choice; each backend reads only `backend.model_setting`. `language` selects
+canned replies. Free-form standing instructions go in `prompt.md`, seeded on
+first run from the packaged `capture_prompt.md` / `capture_prompt.zh.md` per
+`language`. Both files are re-read per message so a change applies to the next
+one. `settings.set_value()` is the programmatic writer (comment-preserving,
+line-based) used by the `/model` command; the Claude agent can also edit these
+files directly (the API agent can't reach `config/` — see Permissions).
 
 Every setting resolves env var → `config.toml` → default, and each new one
 should be documented in three places: the `config.py` module docstring, the
@@ -143,18 +144,27 @@ those in too.
 The same capabilities exist twice, on purpose:
 
 - [commands.py](src/wechat_claude_obsidian_bot/commands.py) — `/status`, `/new`,
-  `/help` (plus Chinese aliases), answered by the bot *before* Claude is
-  involved: instant and free. Unknown `/words` fall through to the agent.
-- [agent_tools.py](src/wechat_claude_obsidian_bot/agent_tools.py) — the same
-  things as in-process MCP tools (`status`, `reset_session`) so natural language
+  `/model`, `/help` (plus Chinese aliases), answered by the bot *before* the
+  agent runs: instant and free. Unknown `/words` fall through to the agent.
+- [agent_tools.py](src/wechat_claude_obsidian_bot/agent_tools.py) (Claude) /
+  [api_tools.py](src/wechat_claude_obsidian_bot/backends/api_tools.py) (API) —
+  the same things as agent tools (`status`, `reset_session`) so natural language
   works too, plus `send_file`/`send_image`, the only way the agent replies with
-  anything but text.
+  anything but text. Two files because agent_tools imports the claude SDK; keep
+  them in sync.
 
-Adding a user-facing capability usually means touching both. New MCP tools must
-be listed in `agent_tools.ALLOWED_TOOLS` *and* reachable through
-`build_options`'s `allowed_tools`. The `send_*` tools are closed over the live
-`msg`, so `agent_tools.server()` is rebuilt per message and those tools only
-exist when a `msg` is passed.
+`/model` is backend-aware: `commands.bind_backend()` (called in `bot.main`) gives
+it the active backend, and `/model [name]` delegates to `backend.set_model()` /
+`model_status()`. The API backend's `set_model` refuses to switch to a model
+whose provider key isn't in `secrets.env` — that's the "ensure a key exists"
+guarantee. Natural-language model switching works only on the Claude path (the
+agent edits `settings.toml`); on the API path `/model` is the way.
+
+Adding a user-facing capability usually means touching both surfaces. Claude MCP
+tools must be in `agent_tools.ALLOWED_TOOLS` *and* `build_options`'s
+`allowed_tools`; the API twins go in `api_tools.build_tools`. The `send_*` tools
+need the live `msg` — closed over per message on Claude (`agent_tools.server()`),
+read from a `ContextVar` on the API side so the cached agent stays valid.
 
 ### Session continuity
 

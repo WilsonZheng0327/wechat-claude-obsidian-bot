@@ -27,6 +27,7 @@ def main(backend) -> None:
     settings.seed()  # runtime settings (model, language)
     load_capture_prompt(settings.load())  # seed the prompt file up front too
     session.configure(CREDS.parent / backend.session_file)
+    commands.bind_backend(backend)  # so /model reaches the active backend
     bot = WeixinBot(credentials_file=require_creds())
 
     def handle(msg, prompt: str, note: str | None = None):

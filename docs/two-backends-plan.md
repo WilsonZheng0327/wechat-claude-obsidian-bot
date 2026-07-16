@@ -301,17 +301,21 @@ traceback. Provider packages are separate extras because deepagents' underlying
   with clean "pip install" messages. Live-tested with `openai:gpt-4o-mini`:
   reply extraction, token/turn footer, cross-restart persistence (thread resumed,
   recalled a codeword), and the adversarial confinement probe all pass.
-- **Step 3 (setup.sh model fork) — NOT DONE.** The non-coder onboarding fork
-  (choose Claude vs any-model, install the right extra, seed the model) still
-  needs building.
+- **Step 3 (setup.sh model fork) — DONE.** setup.sh asks Claude vs any-model up
+  front, installs the matching extra (`.[claude]` or `.[api,api-<provider>]`),
+  seeds the model, and for the API path prompts for the key (hidden input) into
+  `./secrets.env`. The Claude CLI check runs only for the Claude choice; the
+  systemd unit and closing message use the right `run-*` subcommand.
+- **Model switching — DONE (beyond the original plan).** `/model [name]` command
+  (backend-aware via `commands.bind_backend`): shows status or switches, and on
+  the API backend refuses to switch to a provider whose key isn't in
+  `secrets.env`. The settings conflict below is resolved by two fields.
+- **settings.toml now has two model fields** — `model` (Claude) + `api_model`
+  (API) — so switching backends never clobbers the other's choice. Each backend
+  reads `backend.model_setting`. `settings.set_value()` is the comment-preserving
+  writer behind `/model` and setup.sh.
 
 **Findings from step 2:**
-- **settings.toml `model` serves both backends.** Claude wants `default`/`haiku`;
-  the API backend wants `openai:gpt-5`. They can't share one value — running the
-  wrong backend for the current value fails (API preflight gives a clear message;
-  Claude would try the string as a model id). Step 3 (`setup.sh`) must seed the
-  right value per chosen backend, or split into two fields. For now the user sets
-  it by hand to match the backend they run.
 - **~6k token floor per turn** on the API backend — the system prompt (capture
   prompt + preamble) plus deepagents' built-in tool schemas are sent every turn.
   Negligible on mini models; note it for expensive ones.

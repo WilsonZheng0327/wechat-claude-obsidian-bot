@@ -46,14 +46,16 @@ How a message travels:
 - A mainland-China (+86) WeChat account with the 微信ClawBot plugin
   (设置 → 插件 → 微信ClawBot; gray release, iOS ≥ 8.0.70 / Android ≥ 8.0.68).
   International WeChat is not supported by Tencent yet.
-- Python ≥ 3.11 and the [Claude Code CLI](https://code.claude.com)
-  installed and authenticated (subscription login or `ANTHROPIC_API_KEY`).
+- Python ≥ 3.11.
+- **A model.** Either the [Claude Code CLI](https://code.claude.com)
+  (subscription login or `ANTHROPIC_API_KEY`) — the default — *or* an API key
+  for any other provider (OpenAI, Gemini, …). You pick during setup.
 
 ## Setup
 
-The quick way — clone and run the guided installer. It checks Python and
-the Claude CLI (offering to install/log in), installs the package into
-`./.venv`, writes your config, runs the QR pairing, and can set up a
+The quick way — clone and run the guided installer. It asks which model you
+want (Claude, or any provider via an API key), installs the matching pieces
+into `./.venv`, writes your config, runs the QR pairing, and can set up a
 systemd user service. Idempotent; re-run it anytime:
 
 ```sh
@@ -78,10 +80,15 @@ Either way `WCOB_CONFIG` overrides the location, and relative paths inside
 out of the checkout, in `~/.local/share/wechat-claude-obsidian-bot/`. Then:
 
 ```sh
-wcob login  # scan the QR with the phone that has ClawBot enabled
-wcob        # run the bot (checks your Claude CLI login at startup)
-wcob echo   # plumbing test without Claude — just echoes
+wcob login       # scan the QR with the phone that has ClawBot enabled
+wcob run-claude  # run on Claude (bare `wcob` also works)
+wcob run-api     # run on any other provider (needs a key in secrets.env)
+wcob echo        # plumbing test without an agent — just echoes
 ```
+
+`setup.sh` picks the right `run-*` for you and seeds the model. Switch models
+later without restarting the process by messaging `/model` (see below); switch
+*backends* by stopping and starting the other `run-*` command.
 
 Credentials land in `~/.local/share/wechat-claude-obsidian-bot/creds.json`;
 anyone with that file can act as your bot — keep it private.
@@ -107,6 +114,9 @@ message starts fresh.
 
 - `/status` (`/settings`, `/config`, `/状态`, `/设置`) — model, language,
   vault, session state, file locations.
+- `/model [name]` (`/模型`) — show or switch the model. On the API backend it
+  checks that the provider's key is in `secrets.env` first and refuses (without
+  changing anything) if it's missing, telling you which key to add.
 - `/new` (`/reset`, `/新会话`) — the next message starts fresh.
 - `/help` (`/帮助`)
 

@@ -16,10 +16,12 @@ from claude_agent_sdk import (
     query,
 )
 
-from .. import agent_tools, preflight
+from .. import agent_tools, preflight, settings
 from ..config import PROMPT, SETTINGS
 from ..prompting import load_capture_prompt
 from .base import TurnResult
+
+_CLAUDE_ALIASES = ("default", "haiku", "sonnet", "opus")
 
 # Granted only when the vault is already a git repo (we never init one).
 # Scoped rules: every other shell command stays denied in headless runs.
@@ -153,9 +155,35 @@ async def _run(prompt: str, options: ClaudeAgentOptions):
 class ClaudeCodeBackend:
     name = "claude_code"
     session_file = "session.json"
+    model_setting = "model"
 
     def preflight(self) -> None:
         preflight.run()  # fail fast if the Claude CLI is missing or logged out
+
+    def current_model(self) -> str:
+        return settings.load()["model"]
+
+    def set_model(self, name: str) -> str:
+        name = name.strip()
+        if ":" in name:  # provider:model is an API-backend model
+            return (
+                f"{name!r} looks like an API-backend model. This bot is running "
+                "the Claude backend — restart it with `wcob run-api` to use other "
+                "providers, or pick a Claude model: default, haiku, sonnet, opus."
+            )
+        if name not in _CLAUDE_ALIASES and not name.startswith("claude"):
+            return (
+                f"Unknown Claude model {name!r}. Use default, haiku, sonnet, opus, "
+                "or a full claude-* model id."
+            )
+        settings.set_value("model", name)
+        return f"Model set to {name}. Applies from your next message. (No API key needed.)"
+
+    def model_status(self) -> str:
+        return (
+            f"Model: {self.current_model()} (Claude backend, uses your Claude login).\n"
+            "Switch with /model <default|haiku|sonnet|opus|claude-...>."
+        )
 
     def run_turn(self, prompt, *, resume, msg, cfg, vault) -> TurnResult:
         options = build_options(vault, cfg, resume, msg)

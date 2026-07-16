@@ -7,22 +7,31 @@ the user) edits, re-read on every message. Changes persist until changed
 again.
 """
 
+import re
 import tomllib
 
 from .config import SETTINGS
 
-DEFAULTS = {"model": "default", "language": "en"}
+# Two model fields, one per backend, so switching backends never clobbers the
+# other's choice: `model` = the Claude backend (run-claude), `api_model` = the
+# API backend (run-api). Each backend reads only its own; `/model` writes the
+# active one. `language` is shared.
+DEFAULTS = {"model": "default", "api_model": "openai:gpt-4o-mini", "language": "en"}
 
 LANGUAGES = ("en", "zh")
 
 SEED = """\
 # wechat-claude-obsidian-bot runtime settings. The bot edits this file itself when
-# you ask it to ("switch to haiku", "说中文"); you can edit it directly too.
+# you ask it to ("switch to haiku", "说中文") or via /model; edit it directly too.
 # Re-read on every message, so changes apply immediately.
 
-# Claude model for each run: "default" uses your Claude Code default, or
-# give an alias (sonnet / opus / haiku) or a full model id.
+# Claude backend (wcob run-claude) model: "default" uses your Claude Code
+# default, or an alias (sonnet / opus / haiku) or a full model id.
 model = "default"
+
+# API backend (wcob run-api) model, as provider:model. Needs the matching key
+# in secrets.env. e.g. openai:gpt-5, anthropic:claude-sonnet-5, google_genai:gemini-3-pro
+api_model = "openai:gpt-4o-mini"
 
 # Language for the bot's WeChat replies: "en" or "zh".
 language = "en"
@@ -46,13 +55,29 @@ def load() -> dict:
         print(f"[claude-bot] can't read {SETTINGS} ({err}) — using defaults", flush=True)
         return dict(DEFAULTS)
     cfg = dict(DEFAULTS)
-    model = raw.get("model")
-    if isinstance(model, str) and model.strip():
-        cfg["model"] = model.strip()
+    for key in ("model", "api_model"):
+        val = raw.get(key)
+        if isinstance(val, str) and val.strip():
+            cfg[key] = val.strip()
     language = raw.get("language")
     if isinstance(language, str) and language.strip().lower() in LANGUAGES:
         cfg["language"] = language.strip().lower()
     return cfg
+
+
+def set_value(key: str, value: str) -> None:
+    """Write one scalar setting, preserving comments and the rest of the file.
+    Line-based (tomllib is read-only, and we don't want a TOML-writer dep);
+    replaces the `key = ...` line if present, else appends it."""
+    seed()  # ensure the file exists
+    text = SETTINGS.read_text(encoding="utf-8")
+    line = f'{key} = "{value}"'
+    pat = re.compile(rf"^{re.escape(key)}\s*=.*$", re.M)
+    if pat.search(text):
+        text = pat.sub(line, text, count=1)
+    else:
+        text = text.rstrip("\n") + f"\n{line}\n"
+    SETTINGS.write_text(text, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

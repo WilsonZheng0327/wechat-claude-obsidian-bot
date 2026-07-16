@@ -69,34 +69,72 @@ def _fmt_tokens(n: int) -> str:
     return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
 
+def _keyvar_for(model: str) -> str | None:
+    provider = model.split(":", 1)[0]
+    return PROVIDER_KEYS.get(provider, f"{provider.upper()}_API_KEY")
+
+
 class ApiBackend:
     name = "api"
     session_file = "thread.json"
+    model_setting = "api_model"
 
     def __init__(self):
         self._agent = None
         self._agent_key = None
         self._checkpointer = None
 
+    def current_model(self) -> str:
+        return settings.load()["api_model"]
+
     def preflight(self) -> None:
         # Load ./secrets.env into the environment (an already-exported key wins).
         # Must happen before the model client is built — it reads the key eagerly.
         load_dotenv(_secrets_path(), override=False)
-        model = settings.load()["model"]
+        model = self.current_model()
         if ":" not in model:
             sys.exit(
-                f"api backend: settings model is {model!r}, but this backend needs "
-                f"a provider-prefixed model. Set e.g. model = \"openai:gpt-5\" in "
+                f"api backend: api_model is {model!r}, but this backend needs a "
+                f"provider-prefixed model. Set e.g. api_model = \"openai:gpt-5\" in "
                 f"config/settings.toml (openai / anthropic / google_genai / ollama)."
             )
-        provider = model.split(":", 1)[0]
-        keyvar = PROVIDER_KEYS.get(provider, f"{provider.upper()}_API_KEY")
+        keyvar = _keyvar_for(model)
         if keyvar and not os.environ.get(keyvar):
             sys.exit(
                 f"api backend: {keyvar} is not set. Put it in {_secrets_path()} "
                 f"(e.g. {keyvar}=sk-...) or export it, then start again."
             )
         print(f"preflight OK: api backend, model {model}", flush=True)
+
+    def set_model(self, name: str) -> str:
+        name = name.strip()
+        if ":" not in name:
+            return (
+                "API models look like provider:model — e.g. openai:gpt-5, "
+                "anthropic:claude-sonnet-5, google_genai:gemini-3-pro, ollama:llama3. "
+                f"(You typed {name!r}.)"
+            )
+        # Reload secrets so a key just added to secrets.env is seen without restart.
+        load_dotenv(_secrets_path(), override=False)
+        keyvar = _keyvar_for(name)
+        if keyvar and not os.environ.get(keyvar):
+            return (
+                f"{name} needs {keyvar}, which isn't set. Add it to "
+                f"{_secrets_path().name} on the machine (a line `{keyvar}=...`), "
+                "then send /model again. I can't set keys from here."
+            )
+        settings.set_value("api_model", name)
+        have = f"{keyvar} is present" if keyvar else "no key needed"
+        return f"Model set to {name} ({have}). Applies from your next message."
+
+    def model_status(self) -> str:
+        load_dotenv(_secrets_path(), override=False)
+        present = [p for p, k in PROVIDER_KEYS.items() if k and os.environ.get(k)]
+        return (
+            f"Model: {self.current_model()} (API backend).\n"
+            "Switch with /model provider:model (openai / anthropic / google_genai / ollama).\n"
+            f"API keys found for: {', '.join(present) or 'none'}."
+        )
 
     def _checkpointer_conn(self) -> SqliteSaver:
         if self._checkpointer is None:
@@ -112,10 +150,11 @@ class ApiBackend:
         # only when either changes (e.g. the user switched model). The
         # checkpointer/connection persist across rebuilds.
         system = _system_prompt(cfg)
-        key = hashlib.sha256(f"{cfg['model']}\0{system}".encode()).hexdigest()
+        model = cfg["api_model"]
+        key = hashlib.sha256(f"{model}\0{system}".encode()).hexdigest()
         if key != self._agent_key:
             self._agent = create_deep_agent(
-                model=cfg["model"],
+                model=model,
                 backend=FilesystemBackend(root_dir=str(vault), virtual_mode=True),
                 system_prompt=system,
                 tools=api_tools.build_tools(vault),

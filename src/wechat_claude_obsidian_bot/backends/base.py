@@ -36,9 +36,29 @@ class Backend(Protocol):
     """Basename of this backend's session store, resolved under CREDS.parent.
     Distinct per backend so a handle from one is never fed to the other."""
 
+    model_setting: str
+    """Which settings.toml key holds this backend's model — "model" (Claude) or
+    "api_model" (API) — so switching backends never clobbers the other's model."""
+
     def preflight(self) -> None:
         """Fail fast, in plain words, before polling starts. Raises SystemExit
         (via sys.exit) on a fatal problem."""
+        ...
+
+    def current_model(self) -> str:
+        """The backend's currently-configured model (its settings field)."""
+        ...
+
+    def set_model(self, name: str) -> str:
+        """Validate `name` for this backend, ensure any required API key is
+        present, persist it, and return a confirmation — or an actionable error
+        (and change nothing) if the name is wrong for this backend or the key is
+        missing. Drives the /model command."""
+        ...
+
+    def model_status(self) -> str:
+        """Human summary for `/model` with no argument: current model, how to
+        switch, and (API) which provider keys are present."""
         ...
 
     def run_turn(

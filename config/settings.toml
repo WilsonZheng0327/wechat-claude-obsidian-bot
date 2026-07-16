@@ -1,10 +1,14 @@
 # wechat-claude-obsidian-bot runtime settings. The bot edits this file itself when
-# you ask it to ("switch to haiku", "说中文"); you can edit it directly too.
+# you ask it to ("switch to haiku", "说中文") or via /model; edit it directly too.
 # Re-read on every message, so changes apply immediately.
 
-# Claude model for each run: "default" uses your Claude Code default, or
-# give an alias (sonnet / opus / haiku) or a full model id.
+# Claude backend (wcob run-claude) model: "default" uses your Claude Code
+# default, or an alias (sonnet / opus / haiku) or a full model id.
 model = "default"
+
+# API backend (wcob run-api) model, as provider:model. Needs the matching key
+# in secrets.env. e.g. openai:gpt-5, anthropic:claude-sonnet-5, google_genai:gemini-3-pro
+api_model = "openai:gpt-4o-mini"
 
 # Language for the bot's WeChat replies: "en" or "zh".
 language = "en"

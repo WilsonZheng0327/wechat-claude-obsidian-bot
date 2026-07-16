@@ -52,7 +52,60 @@ python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
     || die "Python >= 3.11 required (found $(python3 -V))."
 echo "OK: $(python3 -V)"
 
-# --- 2. Claude Code CLI ------------------------------------------------------
+# --- 2. choose the model backend --------------------------------------------
+# Sets: BACKEND (claude|api), RUN_SUBCMD, EXTRAS (pip extras), and for api the
+# provider/model/key. Everything downstream (CLI check, install, settings, run
+# command) forks on BACKEND.
+say "Choosing your model"
+echo "  1) Claude  — uses your Claude subscription or an Anthropic key"
+echo "               (installs the Claude Code CLI)"
+echo "  2) Any model — OpenAI, Gemini, etc. via an API key (no Claude Code)"
+ask "Which one?" "1"
+case "$REPLY" in
+    2|api|any|other) BACKEND=api ;;
+    *)               BACKEND=claude ;;
+esac
+
+if [ "$BACKEND" = claude ]; then
+    RUN_SUBCMD="run-claude"
+    EXTRAS="[claude]"
+    echo "OK: Claude backend"
+else
+    RUN_SUBCMD="run-api"
+    echo "Providers: openai, anthropic, google, ollama"
+    ask "Provider?" "openai"
+    case "$REPLY" in
+        openai)                     PROV_EXTRA=api-openai;    KEYVAR=OPENAI_API_KEY;    MPREFIX=openai ;;
+        anthropic)                  PROV_EXTRA=api-anthropic; KEYVAR=ANTHROPIC_API_KEY; MPREFIX=anthropic ;;
+        google|gemini|google_genai) PROV_EXTRA=api-google;    KEYVAR=GOOGLE_API_KEY;    MPREFIX=google_genai ;;
+        ollama)                     PROV_EXTRA=;              KEYVAR=;                  MPREFIX=ollama ;;
+        *) die "unknown provider '$REPLY' (openai / anthropic / google / ollama)" ;;
+    esac
+    EXTRAS="[api${PROV_EXTRA:+,$PROV_EXTRA}]"
+    ask "Model name (without the provider prefix), e.g. gpt-5" ""
+    [ -n "$REPLY" ] || die "a model name is required."
+    API_MODEL="$MPREFIX:$REPLY"
+    # API key -> ./secrets.env (gitignored, repo base). Hidden input; idempotent.
+    if [ -n "$KEYVAR" ]; then
+        SECRETS="$PWD/secrets.env"
+        if [ -f "$SECRETS" ] && grep -q "^$KEYVAR=" "$SECRETS"; then
+            echo "OK: $KEYVAR already set in $SECRETS"
+        elif [ -t 0 ]; then
+            printf 'Paste your %s (input hidden): ' "$KEYVAR"
+            read -rs KEYVAL; echo
+            [ -n "$KEYVAL" ] || die "no key entered."
+            printf '%s=%s\n' "$KEYVAR" "$KEYVAL" >> "$SECRETS"
+            chmod 600 "$SECRETS"
+            echo "OK: saved $KEYVAR to $SECRETS (gitignored)"
+        else
+            die "set $KEYVAR in $SECRETS before running (a line \`$KEYVAR=...\`)."
+        fi
+    fi
+    echo "OK: API backend, model $API_MODEL"
+fi
+
+# --- 3. Claude Code CLI (Claude backend only) --------------------------------
+if [ "$BACKEND" = claude ]; then
 say "Checking Claude Code CLI"
 if ! command -v claude >/dev/null; then
     echo "The agent runs through the Claude Code CLI, which isn't installed."
@@ -78,13 +131,14 @@ elif [ -t 0 ]; then
 else
     die "Claude CLI is not logged in — run \`claude auth login\`, then re-run ./setup.sh"
 fi
+fi  # end BACKEND = claude
 
-# --- 3. install the package --------------------------------------------------
+# --- 4. install the package --------------------------------------------------
 say "Installing $APP into $VENV"
 [ -d "$VENV" ] || python3 -m venv "$VENV"
-"$VENV/bin/pip" install -q -e .
+"$VENV/bin/pip" install -q -e ".$EXTRAS"
 [ -x "$VENV/bin/wcob" ] || die "install finished but $VENV/bin/wcob is missing"
-echo "OK: wcob installed (subcommands: run, login, echo)"
+echo "OK: wcob installed with extras $EXTRAS"
 
 # Optional: plain `wcob` instead of the full venv path, via a shell alias.
 WCOB=$PWD/$VENV/bin/wcob
@@ -140,6 +194,22 @@ PY
     echo "OK: wrote $CONFIG_FILE (vault = $VAULT_PATH)"
 fi
 
+# Seed settings.toml and, for the API backend, set the chosen model. (Claude's
+# default "default" needs no change.) settings.set_value preserves the file's
+# comments and is idempotent.
+"$VENV/bin/python" - <<'PY'
+from wechat_claude_obsidian_bot import settings
+settings.seed()
+PY
+if [ "$BACKEND" = api ]; then
+    "$VENV/bin/python" - "$API_MODEL" <<'PY'
+import sys
+from wechat_claude_obsidian_bot import settings
+settings.set_value("api_model", sys.argv[1])
+print(f"OK: api_model = {sys.argv[1]}")
+PY
+fi
+
 # --- 5. WeChat pairing ---------------------------------------------------
 say "WeChat pairing"
 if [ -f "$DATA_DIR/creds.json" ]; then
@@ -163,7 +233,7 @@ Description=wechat-claude-obsidian-bot
 After=network-online.target
 
 [Service]
-ExecStart=$PWD/$VENV/bin/wcob
+ExecStart=$PWD/$VENV/bin/wcob $RUN_SUBCMD
 Restart=on-failure
 RestartSec=10
 
@@ -184,10 +254,9 @@ if systemctl --user is-active wcob.service >/dev/null 2>&1; then
 else
     if [ "$WCOB" = wcob ]; then
         echo "Open a new shell (or \`source $RC\`) so the alias applies,"
-        echo "then start the bot with:  wcob"
+        echo "then start the bot with:  wcob $RUN_SUBCMD"
     else
-        echo "Start the bot with:  $WCOB"
+        echo "Start the bot with:  $WCOB $RUN_SUBCMD"
     fi
-    echo "(it re-checks the Claude CLI and login on every start)"
-    echo "Then message it on WeChat — try /status."
+    echo "Then message it on WeChat — try /status, or /model to switch models."
 fi
