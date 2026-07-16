@@ -2,7 +2,7 @@
 
 Media lands in <vault>/Wechat_Saved/ so notes can embed it with ![[...]].
 Downloads are capped at MAX_MEDIA_MB (config). Voice needs nothing here —
-claude_bot works from WeChat's own ASR transcript (msg.text), and a voice
+bot.py works from WeChat's own ASR transcript (msg.text), and a voice
 message without one is answered with a "please type it" reply.
 """
 

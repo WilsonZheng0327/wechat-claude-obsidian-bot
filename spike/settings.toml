@@ -1,0 +1,11 @@
+# Runtime settings for the gateway spike ONLY. run.sh points WCOB_SETTINGS
+# here so your real ~/.config/wechat-claude-obsidian-bot/settings.toml is left
+# untouched — the agent can rewrite this copy mid-conversation without you
+# losing your normal config.
+
+# Must match `model_name` in spike/litellm.yaml. NOT "default": that lets the
+# CLI pick its own model name, which the proxy has no mapping for and would
+# reject. See the alias note in litellm.yaml.
+model = "claude-sonnet-4-6"
+
+language = "en"

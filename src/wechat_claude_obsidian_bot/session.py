@@ -9,9 +9,22 @@ State survives bot restarts via a small JSON file next to the credentials.
 import json
 import time
 
+from pathlib import Path
+
 from .config import CREDS, SESSION_WINDOW_MINUTES
 
+# Which file holds the last run's handle. Defaults to session.json so importing
+# this module standalone (e.g. commands.py) still works; each backend calls
+# configure() at startup to point it at its own file — session.json for Claude,
+# thread.json for the API path — so a handle from one backend is never fed to
+# the other.
 STATE = CREDS.parent / "session.json"
+
+
+def configure(path: Path) -> None:
+    """Point the session store at `path` (called once, by the backend)."""
+    global STATE
+    STATE = path
 
 
 def resumable() -> str | None:

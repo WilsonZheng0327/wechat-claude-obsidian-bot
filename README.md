@@ -68,10 +68,14 @@ pipx install git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot
 # from a checkout: pip install .
 ```
 
-Run `wcob` once — it creates a commented
-`~/.config/wechat-claude-obsidian-bot/config.toml` (every setting is
+Run `wcob` once — it creates a commented `config.toml` (every setting is
 documented there); set `vault` to your vault's path (or just
-`export WCOB_VAULT=~/YourVault`). Then:
+`export WCOB_VAULT=~/YourVault`). From a checkout it lands in **`config/`**,
+next to the code, alongside `prompt.md` and `settings.toml`; a plain
+`pipx`/`pip` install uses `~/.config/wechat-claude-obsidian-bot/` instead.
+Either way `WCOB_CONFIG` overrides the location, and relative paths inside
+`config.toml` are relative to that file. Your WeChat credentials always stay
+out of the checkout, in `~/.local/share/wechat-claude-obsidian-bot/`. Then:
 
 ```sh
 wcob login  # scan the QR with the phone that has ClawBot enabled
@@ -119,10 +123,10 @@ helper); the bot never turns a plain folder into a repo itself.
 
 ## Customizing
 
-The agent's standing instructions live in
-`~/.config/wechat-claude-obsidian-bot/prompt.md`, seeded on first run from
-the packaged default (English or Chinese, per `language`). Change them two
-ways:
+The agent's standing instructions live in `config/prompt.md` — or
+`~/.config/wechat-claude-obsidian-bot/prompt.md` if you didn't install from a
+checkout — seeded on first run from the packaged default (English or Chinese,
+per `language`). Change them two ways:
 
 - **Edit the file** — plain Markdown, re-read on every message.
 - **Tell the bot** — "from now on, reply in Chinese", "put links under

@@ -11,7 +11,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP=wechat-claude-obsidian-bot
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP"
+# Config lives in the checkout's config/ (config.py: CONFIG_DIR). The XDG dir is
+# only the fallback for a non-checkout install, or a leftover from before the
+# move — hence LEGACY_. Don't confuse it with config.py's CONFIG_DIR.
+CONFIG_DIR=config
+LEGACY_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$APP"
 VENV=.venv
 
@@ -101,18 +105,26 @@ else
 fi
 
 # --- 4. config (vault path) --------------------------------------------------
+# Mirrors config.py's search order: $CONFIG_DIR (the checkout's config/) first,
+# then the XDG dir, which is only still consulted so an install predating the
+# move keeps working. Keep these two in sync.
 say "Configuring"
-mkdir -p "$CONFIG_DIR"
-if [ -f "$CONFIG_DIR/config.toml" ]; then
-    echo "OK: $CONFIG_DIR/config.toml already exists:"
-    grep -E '^\s*(vault|max_media_mb|session_window_minutes)' "$CONFIG_DIR/config.toml" || true
+CONFIG_FILE=
+for c in "$CONFIG_DIR/config.toml" "$LEGACY_CONFIG_DIR/config.toml"; do
+    if [ -f "$c" ]; then CONFIG_FILE=$c; break; fi
+done
+if [ -n "$CONFIG_FILE" ]; then
+    echo "OK: $CONFIG_FILE already exists:"
+    grep -E '^\s*(vault|max_media_mb|session_window_minutes)' "$CONFIG_FILE" || true
 else
     ask "Path to your Obsidian vault (the folder the agent reads/writes)" "$HOME/Notes"
     VAULT_PATH=${REPLY/#\~/$HOME}
     [ -n "$VAULT_PATH" ] || die "a vault path is required (or set WCOB_VAULT later)."
     [ -d "$VAULT_PATH" ] || die "no such directory: $VAULT_PATH"
+    mkdir -p "$CONFIG_DIR"
+    CONFIG_FILE="$CONFIG_DIR/config.toml"
     # Single source of truth: the packaged template, with vault filled in.
-    "$VENV/bin/python" - "$VAULT_PATH" > "$CONFIG_DIR/config.toml" <<'PY'
+    "$VENV/bin/python" - "$VAULT_PATH" > "$CONFIG_FILE" <<'PY'
 import sys
 
 vault = sys.argv[1]
@@ -125,7 +137,7 @@ if f'vault = "{vault}"' not in out:
     out += f'\nvault = "{vault}"\n'
 print(out, end="")
 PY
-    echo "OK: wrote $CONFIG_DIR/config.toml (vault = $VAULT_PATH)"
+    echo "OK: wrote $CONFIG_FILE (vault = $VAULT_PATH)"
 fi
 
 # --- 5. WeChat pairing ---------------------------------------------------

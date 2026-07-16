@@ -1,0 +1,10 @@
+# wechat-claude-obsidian-bot runtime settings. The bot edits this file itself when
+# you ask it to ("switch to haiku", "说中文"); you can edit it directly too.
+# Re-read on every message, so changes apply immediately.
+
+# Claude model for each run: "default" uses your Claude Code default, or
+# give an alias (sonnet / opus / haiku) or a full model id.
+model = "default"
+
+# Language for the bot's WeChat replies: "en" or "zh".
+language = "en"

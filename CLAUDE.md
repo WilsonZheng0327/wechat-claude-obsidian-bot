@@ -31,14 +31,42 @@ directory, and an authenticated `claude` CLI — all three fail fast at startup
 
 ## Architecture
 
-[claude_bot.py](src/wechat_claude_obsidian_bot/claude_bot.py) is the spine.
-`main()` registers one `@bot.on_*` handler per WeChat message type; each funnels
-into `handle()`, which builds a prompt string, calls `run_agent()`, and replies.
-Media handlers download into `<vault>/Wechat_Saved/` *first*
+[bot.py](src/wechat_claude_obsidian_bot/bot.py) is the spine, and it is
+**provider-neutral**. `main(backend)` registers one `@bot.on_*` handler per
+WeChat message type; each funnels into `handle()`, which builds a prompt string,
+calls `backend.run_turn()`, and replies. Media handlers download into
+`<vault>/Wechat_Saved/` *first*
 ([media_in.py](src/wechat_claude_obsidian_bot/media_in.py)) and then hand the
 agent a vault-relative path to `Read` — the agent never touches WeChat's
 download API. Messages are handled sequentially; anything arriving mid-run is
 picked up on the next poll via the iLink cursor.
+
+### Backends — the one provider-specific seam
+
+Everything that knows *how a turn runs* lives behind the `Backend` protocol
+([backends/base.py](src/wechat_claude_obsidian_bot/backends/base.py)):
+`preflight()`, `run_turn() -> TurnResult`, and two attributes (`name`,
+`session_file`). `handle()` is the entire seam — build a prompt, call
+`run_turn`, store `result.handle`, send `result.reply` + `result.footer`.
+Everything before and after is shared.
+
+- [backends/claude_code.py](src/wechat_claude_obsidian_bot/backends/claude_code.py)
+  — `claude-agent-sdk` → the `claude` CLI (the original path; `build_options`,
+  the run loop, and `GIT_TOOLS` moved here unchanged). Handle = SDK `session_id`.
+- `backends/api.py` — deepagents + any provider via an API key. **Not built
+  yet** — see [docs/two-backends-plan.md](docs/two-backends-plan.md).
+
+cli.py maps commands to backends: `run-claude` (and bare `wcob` / `run`, for the
+systemd unit and shell alias) → `ClaudeCodeBackend`; `run-api` → `ApiBackend`,
+lazy-imported so a missing extra prints a `pip install` hint, not a traceback.
+[prompting.py](src/wechat_claude_obsidian_bot/prompting.py) holds
+`load_capture_prompt` (the shared prompt.md loader) so backends don't import
+bot.py. [claude_bot.py](src/wechat_claude_obsidian_bot/claude_bot.py) is now a
+one-line back-compat shim.
+
+Adding a backend: implement the protocol, add a `wcob run-<name>` in cli.py,
+give it a distinct `session_file`, and wire any new deps as a pyproject extra.
+`prompt.md` is shared; the system-prompt *scaffolding* around it is per-backend.
 
 ### Three config surfaces, deliberately distinct
 
@@ -66,6 +94,42 @@ should be documented in three places: the `config.py` module docstring, the
 `CONFIG_SEED` template (which `setup.sh` reuses as its single source of truth),
 and the README.
 
+#### Where these three live — and why `config/` is not decoration
+
+All three sit in **`<repo>/config/`** (`config.CONFIG_DIR`). `config.toml` is
+found via `$WCOB_CONFIG` → `<repo>/config/config.toml` → the XDG path;
+`prompt.md` and `settings.toml` default beside whichever config won.
+`config.REPO` decides: it walks up from `config.py` and confirms a
+`pyproject.toml`, so the editable install `setup.sh` does keeps config with the
+code, while a plain `pip install` still uses `$XDG_CONFIG_HOME` (and gets no
+`config/` subdir imposed on it).
+
+`config/` is an organizational choice, **not** a security boundary — an earlier
+version of this file claimed the subdirectory scoped the agent's reach via
+`add_dirs`. That was wrong: `add_dirs` never confined file tools (see
+Permissions). The real boundary is the `PreToolUse` hook, which on the Claude
+backend denies file access outside the vault + `prompt.md`/`settings.toml`
+*wherever those files live*. So the agent can edit exactly those two files and
+nothing else in `config/` — `config.toml` and `secrets.env` beside them are
+denied by the hook regardless of directory layout. (This also means the API key
+lives at `./secrets.env`, repo base, purely for hand-editability + gitignore;
+its safety from the Claude agent comes from the hook, not its location.)
+
+Relative paths inside `config.toml` resolve against **that file's own
+directory, not the cwd** — the bot must behave the same started from the repo,
+from `/tmp`, or from a systemd unit with no `WorkingDirectory`.
+
+`config/prompt.md` and `config/settings.toml` are **tracked in git**; the agent
+rewrites them itself, so the diffs are the record of what it changed.
+`config/config.toml` and `./secrets.env` are gitignored.
+
+`creds.json` deliberately stays in `$XDG_DATA_HOME` — it's a live WeChat
+credential and a git working tree is the wrong home for it (the hook already
+denies the agent reading it, but keep it out of the repo regardless).
+`session.json`/`thread.json` and the `.sync` cursor live beside it because
+`session.py` derives them from `CREDS.parent`. Don't "finish the job" by moving
+those in too.
+
 ### Two parallel command surfaces — keep them in sync
 
 The same capabilities exist twice, on purpose:
@@ -87,22 +151,48 @@ exist when a `msg` is passed.
 ### Session continuity
 
 [session.py](src/wechat_claude_obsidian_bot/session.py) stores the last run's
-`session_id` in a JSON file next to `creds.json`. A message within
-`session_window_minutes` resumes it (`resume=` in `build_options`), so
-follow-ups like "actually file that under Economics" work. Note the
+handle (an opaque string) in a JSON file next to `creds.json`. A message within
+`session_window_minutes` resumes it (`resume=` into `run_turn`), so follow-ups
+like "actually file that under Economics" work. The store is backend-neutral —
+it holds whatever string the backend returns — but each backend calls
+`session.configure()` to point it at its **own** file (`session.json` for
+Claude, `thread.json` for the API path). Distinct files on purpose: the handles
+look alike, and feeding one backend's handle to the other resumes nothing (a
+silently fresh conversation) rather than erroring. Note the
 `suppress_remember()` wrinkle: the agent's `reset_session` tool clears state
 *mid-run*, and without suppression `handle()` would immediately re-store the
 very session that was just cleared.
 
-### Permissions
+### Permissions (Claude backend)
 
-Headless runs use `permission_mode="acceptEdits"` with an explicit
-`allowed_tools` allowlist — no general `Bash`. Git is the one exception:
-`GIT_TOOLS` (scoped `Bash(git status:*)`-style rules) is granted only when
-`<vault>/.git` already exists, and the bot never runs `git init` itself. Adding
-a tool here widens what a WeChat message can do on the user's machine, so treat
-the allowlist as a security boundary. `setting_sources=["project"]` loads the
-*vault's* `CLAUDE.md`, which is where note-format conventions belong — not here.
+The `allowed_tools` allowlist controls which tools are *auto-approved* (no
+`Bash` except scoped `GIT_TOOLS`, granted only when `<vault>/.git` exists). It
+is **not** a filesystem boundary, and neither is `add_dirs` — both were once
+assumed to be, wrongly. **Verified empirically:** with `Read`/`Write`/`Edit`
+allowed, the agent can read and write *any absolute path the process can* —
+`/etc/passwd`, `creds.json`, `src/*.py` — regardless of `cwd` or `add_dirs`.
+Left unguarded that is remote code execution: a WeChat message (or a prompt
+injection inside captured content — this bot ingests untrusted articles/files)
+could rewrite the bot's own source, which runs on the next restart.
+
+The actual filesystem boundary is a **`PreToolUse` hook**, `_confine_hook` in
+[claude_code.py](src/wechat_claude_obsidian_bot/backends/claude_code.py). It
+denies any file tool whose resolved path escapes the vault plus exactly
+`prompt.md` and `settings.toml` (the two files the agent is meant to edit — not
+their directory, so `config.toml` and `secrets.env` beside them stay
+unreachable). A `PreToolUse` hook is used rather than a `can_use_tool` callback
+because the hook fires for **every** call and cannot be shadowed by an
+`allowed_tools` entry or by a permissive `.claude/settings.json` the agent might
+write into the vault (that would otherwise be a two-message escape). `.resolve()`
+canonicalizes `..` and symlinks so neither escapes. Setting `can_use_tool` or a
+hook forces streaming-mode input — the prompt is wrapped as a one-item async
+iterable in `_run` (a plain string raises).
+
+If you add a file-touching tool, add it to `FILE_TOOLS` or it bypasses the hook.
+`setting_sources=["project"]` loads the *vault's* `CLAUDE.md` (note-format
+conventions); its allow rules can't widen the hook. The API backend (path 2)
+needs its own equivalent confinement — `FilesystemBackend(root_dir=VAULT)` is
+claimed but must be verified the same adversarial way, not assumed.
 
 ## Conventions worth knowing
 
@@ -115,8 +205,9 @@ the allowlist as a security boundary. `setting_sources=["project"]` loads the
   in [preflight.py](src/wechat_claude_obsidian_bot/preflight.py), `</dev/null`
   plus `timeout -k` in [setup.sh](setup.sh). Preserve this in any new call.
 - **The agent's final message is phone-bound plain text** — the prompt forbids
-  markdown headings, tables, and code blocks. `run_agent()` appends the run's
-  cost and turn count to every reply.
+  markdown headings, tables, and code blocks. `handle()` appends the backend's
+  `TurnResult.footer` (cost/turns for Claude, tokens/turns for the API path) to
+  every reply.
 - **Failure is a chat reply, not a crash.** Handlers catch broadly, log the
   traceback to stdout, and send the user a `tr()` string; the poll loop keeps
   running.

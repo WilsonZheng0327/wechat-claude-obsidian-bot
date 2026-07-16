@@ -1,6 +1,10 @@
 .venv/
+.venv-spike/
+spike/proxy.log
 config.toml
+secrets.env
 creds*
 __pycache__/
 *.pyc
 *.egg-info/
+*.txt
