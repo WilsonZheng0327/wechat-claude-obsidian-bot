@@ -20,8 +20,22 @@ classifiers = [
 ]
 dependencies = [
     "weixin-ilink[qr]>=0.3.5",
-    "claude-agent-sdk>=0.2",
 ]
+
+[project.optional-dependencies]
+# Each backend is an extra so a user installs only the one they run. cli.py
+# lazy-imports both and turns a missing extra into a "pip install" hint.
+claude = ["claude-agent-sdk>=0.2"]
+api = [
+    "deepagents==0.6.12",           # pinned: 0.x, churns fast (decision in docs)
+    "langgraph-checkpoint-sqlite>=3.1",
+    "python-dotenv>=1.0",
+]
+# Provider integrations for the api backend — deepagents' init_chat_model needs
+# the matching LangChain package. Install alongside `api`, e.g. .[api,api-openai].
+api-openai = ["langchain-openai"]
+api-google = ["langchain-google-genai"]
+api-anthropic = ["langchain-anthropic"]
 
 [project.urls]
 Repository = "https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"

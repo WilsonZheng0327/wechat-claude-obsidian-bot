@@ -53,8 +53,16 @@ Everything before and after is shared.
 - [backends/claude_code.py](src/wechat_claude_obsidian_bot/backends/claude_code.py)
   — `claude-agent-sdk` → the `claude` CLI (the original path; `build_options`,
   the run loop, and `GIT_TOOLS` moved here unchanged). Handle = SDK `session_id`.
-- `backends/api.py` — deepagents + any provider via an API key. **Not built
-  yet** — see [docs/two-backends-plan.md](docs/two-backends-plan.md).
+- [backends/api.py](src/wechat_claude_obsidian_bot/backends/api.py) — deepagents +
+  LangGraph, any provider via a `provider:model` string in settings.toml and a
+  key in `./secrets.env`. Handle = LangGraph `thread_id` in a SQLite
+  checkpointer (`threads.db` next to `creds.json`); the bot stores only the id
+  in `thread.json`. File tools confined by `FilesystemBackend(virtual_mode=True)`
+  — see Permissions. Its four agent tools live in
+  [backends/api_tools.py](src/wechat_claude_obsidian_bot/backends/api_tools.py)
+  (the LangChain twin of `agent_tools.py`). MVP scope: no image-vision parity and
+  no natural-language settings editing (the vault-rooted backend can't reach
+  `config/`); model/language change via `/commands` or editing settings.toml.
 
 cli.py maps commands to backends: `run-claude` (and bare `wcob` / `run`, for the
 systemd unit and shell alias) → `ClaudeCodeBackend`; `run-api` → `ApiBackend`,
@@ -190,9 +198,17 @@ iterable in `_run` (a plain string raises).
 
 If you add a file-touching tool, add it to `FILE_TOOLS` or it bypasses the hook.
 `setting_sources=["project"]` loads the *vault's* `CLAUDE.md` (note-format
-conventions); its allow rules can't widen the hook. The API backend (path 2)
-needs its own equivalent confinement — `FilesystemBackend(root_dir=VAULT)` is
-claimed but must be verified the same adversarial way, not assumed.
+conventions); its allow rules can't widen the hook.
+
+**API backend (path 2) confinement — verified, not assumed.** deepagents'
+`FilesystemBackend(root_dir=VAULT, virtual_mode=True)` denies absolute paths and
+`..` escapes (tested directly; `virtual_mode=False`/unset does **not** — the SDK
+even warns so). The built-in `execute` (shell) tool is inert because
+`FilesystemBackend` is a non-sandbox backend that doesn't implement execution —
+confirmed by an adversarial run (agent asked to `cat /etc/passwd` and write
+outside; both denied, disk checked). If you ever swap in a sandbox/exec-capable
+backend, that inertness disappears and `execute` becomes an escape hatch —
+re-run the adversarial probe.
 
 ## Conventions worth knowing
 

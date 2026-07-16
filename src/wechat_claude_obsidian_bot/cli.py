@@ -19,7 +19,13 @@ commands:
 def _run_claude() -> None:
     # Imports stay lazy so `wcob login` and the other backend work before this
     # one's optional deps (claude-agent-sdk, the `claude` CLI) resolve.
-    from .backends.claude_code import ClaudeCodeBackend
+    try:
+        from .backends.claude_code import ClaudeCodeBackend
+    except ImportError as err:
+        sys.exit(
+            f"wcob run-claude: the Claude backend isn't installed ({err}).\n"
+            "Install it with:  pip install '.[claude]'  (and the `claude` CLI)."
+        )
     from .bot import main as run
     run(ClaudeCodeBackend())
 

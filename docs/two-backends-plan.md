@@ -292,6 +292,32 @@ traceback. Provider packages are separate extras because deepagents' underlying
 
 ---
 
+## Status (updated 2026-07-16)
+
+- **Step 1 (refactor) — DONE**, committed. Backend seam, Claude backend, config
+  move, RCE fix.
+- **Step 2 (API backend) — DONE**, verified. `backends/api.py` + `api_tools.py`,
+  pyproject extras (`claude` / `api` / `api-<provider>`), cli lazy-imports both
+  with clean "pip install" messages. Live-tested with `openai:gpt-4o-mini`:
+  reply extraction, token/turn footer, cross-restart persistence (thread resumed,
+  recalled a codeword), and the adversarial confinement probe all pass.
+- **Step 3 (setup.sh model fork) — NOT DONE.** The non-coder onboarding fork
+  (choose Claude vs any-model, install the right extra, seed the model) still
+  needs building.
+
+**Findings from step 2:**
+- **settings.toml `model` serves both backends.** Claude wants `default`/`haiku`;
+  the API backend wants `openai:gpt-5`. They can't share one value — running the
+  wrong backend for the current value fails (API preflight gives a clear message;
+  Claude would try the string as a model id). Step 3 (`setup.sh`) must seed the
+  right value per chosen backend, or split into two fields. For now the user sets
+  it by hand to match the backend they run.
+- **~6k token floor per turn** on the API backend — the system prompt (capture
+  prompt + preamble) plus deepagents' built-in tool schemas are sent every turn.
+  Negligible on mini models; note it for expensive ones.
+- **`execute` shell tool ships enabled but is inert** on `FilesystemBackend`
+  (non-sandbox). Verified. Do not swap to a sandbox backend without re-checking.
+
 ## Suggested build order
 
 1. Refactor to the seam with **only the Claude backend** — extract
