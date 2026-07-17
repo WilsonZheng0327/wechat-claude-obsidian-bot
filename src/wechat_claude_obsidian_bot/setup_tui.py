@@ -97,12 +97,13 @@ class SetupApp(App):
        list), so every card is the same size and nothing scrolls except the
        folder list itself. Keep in sync with MIN_H. */
     #body { height: 15; overflow: hidden; }
-    .sub { color: $text-muted; }
+    /* Description text sits at the top of each step with a blank line under it,
+       so text and the interactive widgets below are always separated. */
+    .sub { color: $text-muted; margin-bottom: 1; }
     .muted { color: $text-muted; margin-top: 1; }
     #msg { margin-top: 1; height: auto; }
     #nav { height: 3; margin-top: 1; align-horizontal: right; }
     #nav Button { margin-left: 2; }
-    #prov { margin-top: 1; }   /* blank line between the intro and the picker */
     #keyrow { height: auto; margin-top: 1; align-vertical: middle; }
     /* margin-top:0 overrides the general `Input` rule so the field lines up with
        the Test button instead of sitting one row lower. */
@@ -178,18 +179,18 @@ class SetupApp(App):
 
     def _build_backend(self) -> list:
         return [
-            RadioSet(RadioButton("Claude", id="claude"),
-                     RadioButton("Any model (API key)", id="api", value=True), id="backend"),
             Static("Claude uses your subscription or Anthropic key (the Claude Code "
                    "harness). Any model uses an API key you add next — OpenAI, Gemini, "
                    "and others.", classes="sub"),
+            RadioSet(RadioButton("Claude", id="claude"),
+                     RadioButton("Any model (API key)", id="api", value=True), id="backend"),
         ]
 
     def _build_keys(self) -> list:
         have = ", ".join(f"✓ {PROVIDERS[p]['label']}" for p in self.keys) or "none yet"
         return [
-            Static("Add a key per provider — it's tested before saving.", classes="sub"),
-            Static(f"Configured: {have}", classes="sub"),
+            Static(f"Add a key per provider — it's tested before saving.\n"
+                   f"Configured: {have}", classes="sub"),
             Select([(lbl, p) for p, lbl in _KEYED], value=_KEYED[0][0],
                    allow_blank=False, id="prov"),
             Horizontal(Input(placeholder="paste API key", password=True, id="key"),
@@ -224,14 +225,14 @@ class SetupApp(App):
 
     def _build_vaultkind(self) -> list:
         return [
+            Static("The bot reads and writes notes in an Obsidian vault — any folder "
+                   "of Markdown. Point it at one you have, or create a fresh one.",
+                   classes="sub"),
             RadioSet(RadioButton("Use an existing vault", id="existing",
                                  value=(self.vault_kind == "existing")),
                      RadioButton("Make a new vault", id="make",
                                  value=(self.vault_kind == "make")),
                      id="vkind"),
-            Static("The bot reads and writes notes in an Obsidian vault — any folder "
-                   "of Markdown. Point it at one you have, or create a fresh one.",
-                   classes="sub"),
         ]
 
     def _build_vaultpath(self) -> list:
