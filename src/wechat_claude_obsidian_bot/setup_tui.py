@@ -102,6 +102,7 @@ class SetupApp(App):
     #msg { margin-top: 1; height: auto; }
     #nav { height: 3; margin-top: 1; align-horizontal: right; }
     #nav Button { margin-left: 2; }
+    #prov { margin-top: 1; }   /* blank line between the intro and the picker */
     #keyrow { height: auto; margin-top: 1; align-vertical: middle; }
     /* margin-top:0 overrides the general `Input` rule so the field lines up with
        the Test button instead of sitting one row lower. */
@@ -131,7 +132,7 @@ class SetupApp(App):
             yield Vertical(id="body")
             with Horizontal(id="nav"):
                 yield Button("← Back", id="back")
-                yield Button("Next →", id="next", variant="primary")
+                yield Button("Next →", id="next")
         yield Static(f"Terminal too small.\nResize to at least {MIN_W}×{MIN_H} and it'll come back.",
                      id="toosmall")
         yield Footer()
