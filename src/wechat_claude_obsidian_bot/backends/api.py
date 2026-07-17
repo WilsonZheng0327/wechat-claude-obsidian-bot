@@ -24,17 +24,13 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from .. import settings
 from ..config import CREDS, REPO
 from ..prompting import capture_prompt
+from ..providers import PROVIDERS
 from . import api_tools
 from .base import TurnResult
 
 # provider prefix (from settings model "provider:model") -> the key env var it
-# needs. None = no key (local, e.g. ollama). Unknown providers skip the check.
-PROVIDER_KEYS = {
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "google_genai": "GOOGLE_API_KEY",
-    "ollama": None,
-}
+# needs, from the shared registry. None = no key (local, e.g. ollama).
+PROVIDER_KEYS = {p: v["key_env"] for p, v in PROVIDERS.items()}
 
 
 def _secrets_path():

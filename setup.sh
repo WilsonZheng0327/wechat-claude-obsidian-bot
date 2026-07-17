@@ -72,36 +72,34 @@ if [ "$BACKEND" = claude ]; then
     echo "OK: Claude backend"
 else
     RUN_SUBCMD="run-api"
-    echo "Providers: openai, anthropic, google, ollama"
-    ask "Provider?" "openai"
-    case "$REPLY" in
-        openai)                     PROV_EXTRA=api-openai;    KEYVAR=OPENAI_API_KEY;    MPREFIX=openai ;;
-        anthropic)                  PROV_EXTRA=api-anthropic; KEYVAR=ANTHROPIC_API_KEY; MPREFIX=anthropic ;;
-        google|gemini|google_genai) PROV_EXTRA=api-google;    KEYVAR=GOOGLE_API_KEY;    MPREFIX=google_genai ;;
-        ollama)                     PROV_EXTRA=;              KEYVAR=;                  MPREFIX=ollama ;;
-        *) die "unknown provider '$REPLY' (openai / anthropic / google / ollama)" ;;
-    esac
-    EXTRAS="[api${PROV_EXTRA:+,$PROV_EXTRA}]"
-    ask "Model name (without the provider prefix), e.g. gpt-5" ""
-    [ -n "$REPLY" ] || die "a model name is required."
-    API_MODEL="$MPREFIX:$REPLY"
-    # API key -> ./secrets.env (gitignored, repo base). Hidden input; idempotent.
-    if [ -n "$KEYVAR" ]; then
-        SECRETS="$PWD/secrets.env"
-        if [ -f "$SECRETS" ] && grep -q "^$KEYVAR=" "$SECRETS"; then
-            echo "OK: $KEYVAR already set in $SECRETS"
-        elif [ -t 0 ]; then
-            printf 'Paste your %s (input hidden): ' "$KEYVAR"
-            read -rs KEYVAL; echo
-            [ -n "$KEYVAL" ] || die "no key entered."
-            printf '%s=%s\n' "$KEYVAR" "$KEYVAL" >> "$SECRETS"
-            chmod 600 "$SECRETS"
-            echo "OK: saved $KEYVAR to $SECRETS (gitignored)"
-        else
-            die "set $KEYVAR in $SECRETS before running (a line \`$KEYVAR=...\`)."
-        fi
+    # Validated, multi-key setup: detects existing keys in secrets.env, tests any
+    # new one against the provider before saving, and lets you add several so
+    # /model can switch between providers later. stdlib-only, so it runs before
+    # the venv exists (via PYTHONPATH). It writes the chosen model + provider list
+    # to a result file we read back for the extras and the seed.
+    [ -t 0 ] || die "the API backend needs an interactive terminal for key setup."
+    KEY_RESULT=$(mktemp)
+    if ! PYTHONPATH="$PWD/src" python3 -m wechat_claude_obsidian_bot.setup_keys \
+            "$PWD/secrets.env" "$KEY_RESULT"; then
+        rm -f "$KEY_RESULT"
+        die "API key setup didn't complete."
     fi
-    echo "OK: API backend, model $API_MODEL"
+    API_MODEL=$(sed -n 's/^api_model=//p' "$KEY_RESULT")
+    KEY_PROVIDERS=$(sed -n 's/^providers=//p' "$KEY_RESULT")
+    rm -f "$KEY_RESULT"
+    [ -n "$API_MODEL" ] || die "no model was chosen."
+    # Install `api` plus the LangChain integration for every provider you keyed,
+    # so /model can switch among them without a reinstall.
+    EXTRAS="[api"
+    for p in $(printf '%s' "$KEY_PROVIDERS" | tr ',' ' '); do
+        case "$p" in
+            openai)       EXTRAS="$EXTRAS,api-openai" ;;
+            anthropic)    EXTRAS="$EXTRAS,api-anthropic" ;;
+            google_genai) EXTRAS="$EXTRAS,api-google" ;;
+        esac
+    done
+    EXTRAS="$EXTRAS]"
+    echo "OK: API backend, model $API_MODEL, installing $EXTRAS"
 fi
 
 # --- 3. Claude Code CLI (Claude backend only) --------------------------------
