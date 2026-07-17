@@ -21,7 +21,10 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Footer, Input, RadioButton, RadioSet, Select, Static
+from textual.css.query import NoMatches
+from textual.widgets import (
+    Button, Footer, Input, OptionList, RadioButton, RadioSet, Select, Static,
+)
 
 from . import settings
 from .config import CONFIG_SEED, CREDS, REPO, default_config_path
@@ -44,13 +47,36 @@ _PKG = {"openai": ("langchain_openai", "api-openai"),
         "anthropic": ("langchain_anthropic", "api-anthropic"),
         "google_genai": ("langchain_google_genai", "api-google")}
 
-# #body is fixed at 13 rows (the API-keys page, the tallest, shown in full — no
-# scrolling). Card is then 23 rows + 1 footer = 24; that's the uniform minimum.
-MIN_W, MIN_H = 60, 24
+# #body is fixed at 15 rows (the vault path picker, the tallest, shown in full).
+# Card is then 25 rows + 1 footer = 26; that's the uniform minimum.
+MIN_W, MIN_H = 60, 26
 
 
 def _secrets_path() -> Path:
     return (REPO / "secrets.env") if REPO else Path("secrets.env")
+
+
+def _list_dirs(text: str, limit: int = 200) -> list[str]:
+    """Existing directories to preview for a typed path. If the text ends with
+    '/' (or is itself a dir), list that dir's subfolders; otherwise treat the
+    last component as a prefix and list matching siblings. Hidden dirs skipped."""
+    text = text.strip()
+    if not text:
+        base, prefix = Path.home(), ""
+    else:
+        p = Path(text).expanduser()
+        if text.endswith("/"):
+            base, prefix = p, ""
+        else:
+            base, prefix = p.parent, p.name
+    try:
+        entries = sorted((d for d in base.iterdir() if d.is_dir() and not d.name.startswith(".")),
+                         key=lambda d: d.name.lower())
+    except (OSError, PermissionError):
+        return []
+    if prefix:
+        entries = [d for d in entries if d.name.lower().startswith(prefix.lower())]
+    return [str(d) for d in entries[:limit]]
 
 
 def _write_vault(vault: str) -> None:
@@ -67,9 +93,10 @@ class SetupApp(App):
     Screen { align: center middle; }
     #card { width: 72; max-width: 92%; height: auto; border: round $primary; padding: 1 2; }
     #heading { text-style: bold; margin-bottom: 1; }
-    /* Fixed height = the tallest step (API keys), so every card is the same size
-       and nothing ever scrolls. Keep in sync with MIN_H (BODY_H below). */
-    #body { height: 13; overflow: hidden; }
+    /* Fixed height = the tallest step (the vault path picker, with its folder
+       list), so every card is the same size and nothing scrolls except the
+       folder list itself. Keep in sync with MIN_H. */
+    #body { height: 15; overflow: hidden; }
     .sub { color: $text-muted; }
     .muted { color: $text-muted; margin-top: 1; }
     #msg { margin-top: 1; height: auto; }
@@ -80,6 +107,7 @@ class SetupApp(App):
        the Test button instead of sitting one row lower. */
     #keyrow #key { width: 1fr; margin-top: 0; }
     #keyrow Button { margin-left: 1; margin-top: 0; }
+    #dirs { height: 6; margin-top: 1; border: round $surface; }
     Input { margin-top: 1; }
     RadioSet { height: auto; width: 1fr; }
     #toosmall { display: none; padding: 2 4; text-align: center; }
@@ -93,6 +121,7 @@ class SetupApp(App):
         self.keys = {}
         self.model = ""
         self.vault = str(Path.home() / "Notes")
+        self.vault_kind = "existing"  # "existing" | "make"
         self.completed = False
 
     # -- layout ------------------------------------------------------------- #
@@ -124,22 +153,25 @@ class SetupApp(App):
 
     # -- step navigation ---------------------------------------------------- #
     def _next_of(self, step):
-        return {"backend": "keys" if self.backend == "api" else "vault",
-                "keys": "model", "model": "vault", "vault": "done"}.get(step)
+        return {"backend": "keys" if self.backend == "api" else "vaultkind",
+                "keys": "model", "model": "vaultkind",
+                "vaultkind": "vaultpath", "vaultpath": "done"}.get(step)
 
     def _prev_of(self, step):
         return {"keys": "backend", "model": "keys",
-                "vault": "model" if self.backend == "api" else "backend",
-                "done": "vault"}.get(step)
+                "vaultkind": "model" if self.backend == "api" else "backend",
+                "vaultpath": "vaultkind", "done": "vaultpath"}.get(step)
 
     async def render_step(self) -> None:
         heading = {"backend": "Choose your model", "keys": "API keys",
-                   "model": "Default model", "vault": "Your vault",
-                   "done": "✓ Setup saved"}[self.step]
+                   "model": "Default model", "vaultkind": "Your vault",
+                   "vaultpath": "Your vault", "done": "✓ Setup saved"}[self.step]
         self.query_one("#heading", Static).update(heading)
         body = self.query_one("#body", Vertical)
         await body.remove_children()
         await body.mount(*getattr(self, f"_build_{self.step}")())
+        if self.step == "vaultpath":
+            self._refresh_dirs(self.vault)  # populate the folder preview
         self.query_one("#back", Button).display = self._prev_of(self.step) is not None
         self.query_one("#next", Button).label = "Finish" if self.step == "done" else "Next →"
 
@@ -189,10 +221,28 @@ class SetupApp(App):
             return current
         return models[0] if models else ""
 
-    def _build_vault(self) -> list:
+    def _build_vaultkind(self) -> list:
         return [
-            Static("The Obsidian folder the bot reads and writes.", classes="sub"),
-            Input(value=self.vault, id="vault"),
+            RadioSet(RadioButton("Use an existing vault", id="existing",
+                                 value=(self.vault_kind == "existing")),
+                     RadioButton("Make a new vault", id="make",
+                                 value=(self.vault_kind == "make")),
+                     id="vkind"),
+            Static("The bot reads and writes notes in an Obsidian vault — any folder "
+                   "of Markdown. Point it at one you have, or create a fresh one.",
+                   classes="sub"),
+        ]
+
+    def _build_vaultpath(self) -> list:
+        if self.vault_kind == "make":
+            sub = ("Type the path for the NEW vault folder (it'll be created). Use the "
+                   "list to browse to where it should live, then add the folder name.")
+        else:
+            sub = "Pick your existing vault folder. Start typing — the list follows you."
+        return [
+            Static(sub, classes="sub"),
+            Input(value=self.vault, id="vault", placeholder=str(Path.home() / "Notes")),
+            OptionList(id="dirs"),
             Static("", id="msg"),
         ]
 
@@ -232,10 +282,18 @@ class SetupApp(App):
                 self.notify("Pick a model", severity="error")
                 return
             self.model = f"{prov}:{name}"
-        elif self.step == "vault":
+        elif self.step == "vaultkind":
+            self.vault_kind = "make" if self.query_one("#vkind", RadioSet).pressed_index == 1 else "existing"
+        elif self.step == "vaultpath":
             self.vault = self.query_one("#vault", Input).value.strip()  # remember for Back
             vault = Path(self.vault).expanduser()
-            if not vault.is_dir():
+            if self.vault_kind == "make":
+                try:
+                    vault.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    self.query_one("#msg", Static).update(f"[red]Couldn't create it: {e}[/]")
+                    return
+            elif not vault.is_dir():
                 self.query_one("#msg", Static).update(f"[red]No such folder: {vault}[/]")
                 return
             _write_vault(str(vault))
@@ -255,6 +313,29 @@ class SetupApp(App):
             mname.set_options(self._model_options(event.value))
             models = _MODELS.get(event.value, [])
             mname.value = models[0] if models else ""
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        # Live folder preview follows the vault path as you type.
+        if event.input.id == "vault":
+            self._refresh_dirs(event.value)
+
+    def _refresh_dirs(self, text: str) -> None:
+        try:
+            dirs = self.query_one("#dirs", OptionList)
+        except NoMatches:
+            return
+        dirs.clear_options()
+        matches = _list_dirs(text)
+        dirs.add_options(matches or ["(no matching folders)"])
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        chosen = str(event.option.prompt)
+        if chosen.startswith("("):  # the "(no matching folders)" placeholder
+            return
+        inp = self.query_one("#vault", Input)
+        inp.value = chosen.rstrip("/") + "/"   # trailing slash -> browse into it
+        inp.focus()
+        self._refresh_dirs(inp.value)
 
     def _test(self) -> None:
         prov = self.query_one("#prov", Select).value
