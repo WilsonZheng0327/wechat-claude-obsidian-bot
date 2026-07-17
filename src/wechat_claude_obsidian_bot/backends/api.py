@@ -23,7 +23,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .. import settings
 from ..config import CREDS, REPO
-from ..prompting import load_capture_prompt
+from ..prompting import capture_prompt
 from . import api_tools
 from .base import TurnResult
 
@@ -43,18 +43,30 @@ def _secrets_path():
 
 def _system_prompt(cfg: dict) -> str:
     reply_lang = "Chinese (中文)" if cfg["language"] == "zh" else "English"
+    model = cfg["api_model"]
     return (
-        "You are a note-capture assistant. Your working directory is the user's "
-        "Obsidian vault; read and write notes there, following the capture "
-        "instructions below.\n\n"
-        f"{load_capture_prompt(cfg)}\n\n"
+        f"You are a note-capture assistant running on the model {model}.\n\n"
+        "FILESYSTEM: your entire filesystem is the user's Obsidian vault — the "
+        "root path `/` IS the vault. Use vault paths like `/Economics/Note.md` or "
+        "`Ideas.md`. NEVER use operating-system paths such as `/Users/...`; they "
+        "do not exist here and every attempt will fail with a file-not-found "
+        "error. Files the user sends are saved under `/Wechat_Saved/` and the "
+        "message gives the path. Save anything the user wants remembered as a "
+        "Markdown NOTE written into the vault with the write tool — never as a "
+        "todo or task list.\n\n"
+        f"{capture_prompt(cfg)}\n\n"
         f"Write your final reply in {reply_lang}, as plain text for a phone — no "
         "markdown headings, tables, or code blocks, and keep it short.\n\n"
-        "Tools: send_file / send_image deliver a vault file or image to the "
+        "TOOLS: send_file / send_image deliver a vault file or image to the "
         "user's phone; status reports current settings; reset_session starts a "
-        "fresh conversation. You can only read and write inside the vault. To "
-        "change the model or reply language the user edits settings.toml or uses "
-        "/status, /new, /help — you don't manage those here."
+        "fresh conversation.\n\n"
+        "SWITCHING MODELS: you cannot change your own model or provider, and you "
+        "cannot become a different backend such as Claude Code. If the user asks "
+        "to switch models, tell them to send the command `/model provider:model` "
+        "(e.g. `/model openai:gpt-5`, `/model anthropic:claude-sonnet-5`). To use "
+        "the Claude Code backend specifically, they restart the bot with `wcob "
+        "run-claude`. Do NOT edit any files or reset the session for these "
+        "requests — just tell them the command."
     )
 
 

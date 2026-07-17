@@ -17,7 +17,7 @@ from weixin_ilink import WeixinBot
 from . import commands, session, settings
 from .config import CREDS, MAX_MEDIA_MB, require_creds, require_vault
 from .media_in import MediaTooLarge, save_file, save_image
-from .prompting import load_capture_prompt
+from .prompting import capture_prompt
 from .settings import tr
 
 
@@ -25,7 +25,7 @@ def main(backend) -> None:
     backend.preflight()  # fail fast if the backend's prerequisites aren't met
     vault = require_vault()
     settings.seed()  # runtime settings (model, language)
-    load_capture_prompt(settings.load())  # seed the prompt file up front too
+    capture_prompt(settings.load())  # seed the prompt file up front too
     session.configure(CREDS.parent / backend.session_file)
     commands.bind_backend(backend)  # so /model reaches the active backend
     bot = WeixinBot(credentials_file=require_creds())
