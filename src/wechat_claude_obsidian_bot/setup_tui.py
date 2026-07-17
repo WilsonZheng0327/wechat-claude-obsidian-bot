@@ -21,7 +21,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Footer, Input, RadioButton, RadioSet, Static
+from textual.widgets import Button, Footer, Input, RadioButton, RadioSet, Select, Static
 
 from . import settings
 from .config import CONFIG_SEED, CREDS, REPO, default_config_path
@@ -29,14 +29,23 @@ from .providers import PROVIDERS
 from .setup_keys import read_secrets, validate, write_key
 
 _KEYED = [(p, v["label"]) for p, v in PROVIDERS.items() if v["key_env"]]
-_EXAMPLE = {"openai": "gpt-5", "anthropic": "claude-sonnet-5",
-            "google_genai": "gemini-3-pro", "ollama": "llama3"}
+
+# Model names offered in the default-model dropdown, per provider. This is the
+# list to edit by hand as providers ship new models — order matters (first is
+# the default). Anything not listed can still be set later via /model.
+_MODELS = {
+    "openai": ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini"],
+    "anthropic": ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5", "claude-sonnet-4-6"],
+    "google_genai": ["gemini-3-pro", "gemini-3-flash", "gemini-2.5-pro"],
+    "ollama": ["llama3", "qwen3", "mistral", "phi4"],
+}
 # provider -> (import name to detect, pip extra to install)
 _PKG = {"openai": ("langchain_openai", "api-openai"),
         "anthropic": ("langchain_anthropic", "api-anthropic"),
         "google_genai": ("langchain_google_genai", "api-google")}
 
-MIN_W, MIN_H = 62, 18
+# Card renders at 20 rows (fixed #body height + chrome); + 1 for the footer.
+MIN_W, MIN_H = 60, 21
 
 
 def _secrets_path() -> Path:
@@ -57,7 +66,9 @@ class SetupApp(App):
     Screen { align: center middle; }
     #card { width: 72; max-width: 92%; height: auto; border: round $primary; padding: 1 2; }
     #heading { text-style: bold; margin-bottom: 1; }
-    #body { height: auto; max-height: 20; overflow-y: auto; }
+    /* Fixed height so every step's card is the same size; shorter steps just
+       pad below. Keep in sync with MIN_H so the min-size guard is uniform. */
+    #body { height: 10; overflow-y: auto; }
     .sub { color: $text-muted; margin-bottom: 1; }
     .muted { color: $text-muted; margin-top: 1; }
     #msg { margin-top: 1; height: auto; }
@@ -141,8 +152,8 @@ class SetupApp(App):
         return [
             Static(f"Add a key for each provider you want — it's tested before saving. "
                    f"Configured: {have}", classes="sub"),
-            RadioSet(*[RadioButton(lbl, id=p, value=(i == 0))
-                       for i, (p, lbl) in enumerate(_KEYED)], id="prov"),
+            Select([(lbl, p) for p, lbl in _KEYED], value=_KEYED[0][0],
+                   allow_blank=False, id="prov"),
             Input(placeholder="paste API key", password=True, id="key"),
             Horizontal(Button("Test key", id="test"), id="testrow"),
             Static("", id="msg"),
@@ -151,15 +162,27 @@ class SetupApp(App):
     def _build_model(self) -> list:
         keyed = list(self.keys)
         # pre-fill from a prior choice so Back doesn't lose it
-        cur_prov, cur_name = (self.model.split(":", 1) if ":" in self.model else (None, ""))
+        cur_prov, cur_name = (self.model.split(":", 1) if ":" in self.model else (keyed[0], ""))
+        if cur_prov not in keyed:
+            cur_prov = keyed[0]
         return [
             Static("Which model to start on. Switch anytime with /model.", classes="sub"),
-            RadioSet(*[RadioButton(PROVIDERS[p]["label"], id=p,
-                                   value=(p == cur_prov if cur_prov else i == 0))
-                       for i, p in enumerate(keyed)], id="mprov"),
-            Input(value=cur_name, placeholder=f"model name, e.g. {_EXAMPLE.get(keyed[0], 'model')}",
-                  id="mname"),
+            Select([(PROVIDERS[p]["label"], p) for p in keyed], value=cur_prov,
+                   allow_blank=False, id="mprov"),
+            Select(self._model_options(cur_prov), value=self._model_default(cur_prov, cur_name),
+                   allow_blank=False, id="mname"),
         ]
+
+    @staticmethod
+    def _model_options(prov):
+        return [(m, m) for m in _MODELS.get(prov, [])] or [("(no models listed)", "")]
+
+    @staticmethod
+    def _model_default(prov, current):
+        models = _MODELS.get(prov, [])
+        if current in models:
+            return current
+        return models[0] if models else ""
 
     def _build_vault(self) -> list:
         return [
@@ -198,11 +221,12 @@ class SetupApp(App):
                 self.query_one("#msg", Static).update("[red]Add at least one key first.[/]")
                 return
         elif self.step == "model":
-            name = self.query_one("#mname", Input).value.strip()
+            prov = self.query_one("#mprov", Select).value
+            name = self.query_one("#mname", Select).value
             if not name:
-                self.notify("Enter a model name", severity="error")
+                self.notify("Pick a model", severity="error")
                 return
-            self.model = f"{self.query_one('#mprov', RadioSet).pressed_button.id}:{name}"
+            self.model = f"{prov}:{name}"
         elif self.step == "vault":
             self.vault = self.query_one("#vault", Input).value.strip()  # remember for Back
             vault = Path(self.vault).expanduser()
@@ -219,8 +243,16 @@ class SetupApp(App):
         self.step = self._next_of(self.step)
         await self.render_step()
 
+    def on_select_changed(self, event: Select.Changed) -> None:
+        # Chain the model dropdown to the provider dropdown on the model step.
+        if event.select.id == "mprov":
+            mname = self.query_one("#mname", Select)
+            mname.set_options(self._model_options(event.value))
+            models = _MODELS.get(event.value, [])
+            mname.value = models[0] if models else ""
+
     def _test(self) -> None:
-        prov = self.query_one("#prov", RadioSet).pressed_button.id
+        prov = self.query_one("#prov", Select).value
         key = self.query_one("#key", Input).value.strip()
         if not key:
             self.query_one("#msg", Static).update("[red]Enter a key first.[/]")
@@ -240,7 +272,6 @@ class SetupApp(App):
             self.keys[prov] = True
             m.update("[green]✓ valid — saved[/]")
             self.query_one("#key", Input).value = ""
-            self.query_one("#prov", RadioSet)  # keep selection
         else:
             m.update(f"[red]✗ {msg}[/]")
 
