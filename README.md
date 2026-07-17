@@ -143,10 +143,19 @@ per `language`). Change them two ways:
   Reading/" — it records the preference in its own prompt file and
   confirms. Undo by telling it so.
 
-`settings.toml` (same directory) holds the machine-readable pair: `model`
-(`"default"`, an alias like `haiku`/`sonnet`/`opus`, or a full model id)
-and `language` (`"en"`/`"zh"`, switches agent replies and built-in
-messages). Same deal — edit it, or just ask: "switch to haiku", "说中文".
+`settings.toml` (same directory) holds the machine-readable settings, one
+per backend so switching backends never clobbers the other's choice:
+`model` for Claude (`"default"`, an alias like `haiku`/`sonnet`/`opus`, or a
+full model id) and `api_model` for the API backend (a `provider:model`
+string like `openai:gpt-5` or `google_genai:gemini-3-pro`), plus `language`
+(`"en"`/`"zh"`, switches agent replies and built-in messages). Same deal —
+edit it, or just ask: "switch to haiku", "说中文". Each backend reads only
+its own field.
+
+API keys for the `run-api` backend live in **`secrets.env`** at the repo
+base (gitignored), as `OPENAI_API_KEY=…` / `GOOGLE_API_KEY=…` lines —
+`setup.sh` writes it for you after testing each key, or add lines by hand.
+`/model provider:model` checks the matching key is present before switching.
 
 Vault-side conventions (folders, wikilinks, note format) belong in the
 *vault's* `CLAUDE.md`, which the agent loads automatically; without one it
@@ -154,13 +163,23 @@ writes sensible, well-linked Markdown.
 
 ## Costs & housekeeping
 
-Each message is one headless agent run (capped at 40 turns / $1); the
-reply shows the run's cost and turn count. On subscription auth the cost
-is notional (it draws on your plan's usage limits); with
-`ANTHROPIC_API_KEY` it's a real charge. Simple captures run a few cents.
+Each message is one headless agent run, and the reply ends with a short
+footer. On the **Claude** backend (capped at 40 turns / $1) it shows the
+run's cost and turn count: on subscription auth the cost is notional (it
+draws on your plan's usage limits); with `ANTHROPIC_API_KEY` it's a real
+charge. Simple captures run a few cents. On the **API** backend the footer
+shows tokens and turns instead, and every run is a real charge against that
+provider's key.
 
-The bot's own state is tiny (`creds.json`, polling cursor, `session.json`).
-What grows: agent transcripts under `~/.claude/projects/` (Claude Code
-deletes them after 30 days by default) and `<vault>/Wechat_Saved/` (prune
-like any vault folder). Logs go to stdout — rotation is your process
+The terminal running the bot logs each turn as it happens — the outgoing
+request and model, every tool call, and a summary line (turns, tokens,
+wall-clock, and cost on the Claude path) — handy for watching what the
+agent does.
+
+The bot's own state is tiny (`creds.json`, polling cursor, and the session
+handle in `session.json`/`thread.json`). What grows: on the Claude backend,
+agent transcripts under `~/.claude/projects/` (Claude Code deletes them
+after 30 days by default); on the API backend, the LangGraph thread history
+in `threads.db` beside `creds.json`; and `<vault>/Wechat_Saved/` on both
+(prune like any vault folder). Logs go to stdout — rotation is your process
 manager's job.
