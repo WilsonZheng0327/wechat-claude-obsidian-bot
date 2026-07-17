@@ -6,6 +6,7 @@ USAGE = """\
 usage: wcob [command]
 
 commands:
+  setup        full-screen terminal wizard (model, API keys, vault)
   run-claude   start the bot on the Claude Code CLI (needs the `claude` CLI)
   run-api      start the bot on any model via an API key (deepagents)
   login        pair with WeChat — prints a QR code to scan; re-run to re-pair
@@ -54,6 +55,12 @@ def main() -> None:
         runner = _run_claude
     elif cmd == "run-api":
         runner = _run_api
+    elif cmd == "setup":
+        try:
+            from .setup_tui import main as runner
+        except ImportError as err:
+            sys.exit(f"wcob setup: the wizard needs the gui extra ({err}).\n"
+                     "Install it with:  pip install '.[gui]'")
     elif cmd == "login":
         from .login import main as runner
     elif cmd == "echo":

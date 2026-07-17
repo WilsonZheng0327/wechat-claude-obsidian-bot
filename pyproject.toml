@@ -36,6 +36,7 @@ api = [
 api-openai = ["langchain-openai"]
 api-google = ["langchain-google-genai"]
 api-anthropic = ["langchain-anthropic"]
+gui = ["textual>=8"]                # `wcob setup` terminal wizard
 
 [project.urls]
 Repository = "https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
