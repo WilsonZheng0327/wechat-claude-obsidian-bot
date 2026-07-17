@@ -133,7 +133,7 @@ class SetupApp(App):
             yield Vertical(id="body")
             with Horizontal(id="nav"):
                 yield Button("← Back", id="back")
-                yield Button("Next →", id="next")
+                yield Button("Next →", id="next", variant="primary")
         yield Static(f"Terminal too small.\nResize to at least {MIN_W}×{MIN_H} and it'll come back.",
                      id="toosmall")
         yield Footer()
@@ -176,6 +176,14 @@ class SetupApp(App):
             self._refresh_dirs(self.vault)  # populate the folder preview
         self.query_one("#back", Button).display = self._prev_of(self.step) is not None
         self.query_one("#next", Button).label = "Finish" if self.step == "done" else "Next →"
+        # Focus the step's main control (not the nav button we just clicked), so
+        # nothing on the card sits there with the focused-highlight by default.
+        for w in body.children:
+            if w.focusable:
+                w.focus()
+                break
+        else:
+            self.query_one("#next", Button).focus()
 
     def _build_backend(self) -> list:
         return [
