@@ -386,11 +386,35 @@ def _install_missing(keyed) -> None:
                    cwd=str(REPO), check=False)
 
 
+def _emit_result(path: str, app: "SetupApp") -> None:
+    """Write the wizard's choices for setup.sh to read back — which backend to
+    install extras for, the keyed providers, and the API model. The wizard has
+    already written config.toml, settings.toml, and secrets.env itself; setup.sh
+    only needs this to finish the bootstrap (backend extras, Claude CLI, pairing)."""
+    lines = [
+        f"backend={app.backend}",
+        f"run_subcmd={'run-api' if app.backend == 'api' else 'run-claude'}",
+        f"providers={','.join(app.keys)}",
+        f"api_model={app.model if app.backend == 'api' else ''}",
+    ]
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def main() -> None:
+    # Launched by setup.sh with a result-file path: run the interactive config,
+    # emit the choices, and let the shell do the bootstrap it owns (install the
+    # backend extras + Claude CLI, pair). With no arg we run standalone and
+    # finish here — installing provider packages ourselves and pairing.
+    result_path = sys.argv[1] if len(sys.argv) > 1 else None
+
     app = SetupApp()
     app.run()
     if not app.completed:
         print("Setup cancelled — nothing was changed beyond any keys you saved.")
+        sys.exit(1 if result_path else 0)
+
+    if result_path:
+        _emit_result(result_path, app)
         return
 
     if app.backend == "api":

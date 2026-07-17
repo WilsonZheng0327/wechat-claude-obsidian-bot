@@ -53,15 +53,20 @@ How a message travels:
 
 ## Setup
 
-The quick way — clone and run the guided installer. It asks which model you
-want (Claude, or any provider via an API key), installs the matching pieces
-into `./.venv`, writes your config, runs the QR pairing, and can set up a
-systemd user service. Idempotent; re-run it anytime:
+The quick way — clone and run the guided installer. It creates `./.venv`,
+installs the Claude CLI if you pick Claude, then opens a **full-screen setup
+wizard** (`wcob setup`) where you choose the backend, add API keys (each
+tested before saving), pick the default model, and set your vault. Back in
+the terminal it installs the matching backend, runs the QR pairing, and can
+set up a systemd user service. Idempotent; re-run it anytime:
 
 ```sh
 git clone https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot
 cd wechat-claude-obsidian-bot && ./setup.sh
 ```
+
+To revisit the config later — switch backend, add a key, change model or
+vault — run the wizard on its own with `wcob setup`.
 
 Or manually. The base package ships **neither backend** — install with the
 extra for the one you want (and, for the API backend, your provider):

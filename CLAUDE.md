@@ -14,13 +14,23 @@ behavior; this file covers what spans files.
 ## Commands
 
 ```sh
-./setup.sh              # guided install: deps, ./.venv, config, QR pairing, systemd unit. Idempotent.
+./setup.sh              # guided install: ./.venv, Claude CLI, then the setup wizard, then QR pairing + systemd. Idempotent.
 python3 -m venv .venv && .venv/bin/pip install -e .             # manual dev install
 
 .venv/bin/wcob          # run the bot (same as `wcob run`)
+.venv/bin/wcob setup    # full-screen config wizard (backend, keys, model, vault); needs the gui extra
 .venv/bin/wcob login    # QR pairing -> creds.json; needed once before `run`
 .venv/bin/wcob echo     # echo bot: exercises the iLink plumbing without Claude
 ```
+
+`setup.sh` and the wizard split work by a handshake: the shell owns what must
+run before/around the package (venv, the Claude CLI binary, systemd), the
+wizard ([setup_tui.py](src/wechat_claude_obsidian_bot/setup_tui.py)) owns the
+interactive config and writes `config.toml`/`settings.toml`/`secrets.env`
+itself. Launched by setup.sh with a result-file arg, `main()` emits the
+chosen backend/providers/model (`_emit_result`) instead of doing its own
+install+pairing, so setup.sh can install the right backend extras. Run with
+no arg (`wcob setup` standalone) it finishes those steps itself.
 
 There is no test suite, linter config, or CI. Verifying a change means running
 the bot (or `wcob echo` for message-plumbing changes) and messaging it from
@@ -100,8 +110,8 @@ files directly (the API agent can't reach `config/` — see Permissions).
 
 Every setting resolves env var → `config.toml` → default, and each new one
 should be documented in three places: the `config.py` module docstring, the
-`CONFIG_SEED` template (which `setup.sh` reuses as its single source of truth),
-and the README.
+`CONFIG_SEED` template (the single source of truth the `wcob setup` wizard
+writes `config.toml` from — see below), and the README.
 
 #### Where these three live — and why `config/` is not decoration
 
