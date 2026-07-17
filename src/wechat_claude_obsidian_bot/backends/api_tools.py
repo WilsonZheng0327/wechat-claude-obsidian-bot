@@ -35,8 +35,11 @@ def _resolve(vault: Path, raw: str) -> Path | str:
     return path
 
 
-def build_tools(vault: Path) -> list:
-    """The tool list for a deep agent, closed over the (constant) vault."""
+def build_tools(vault: Path, set_model=None) -> list:
+    """The tool list for a deep agent, closed over the (constant) vault. If
+    `set_model` (the backend's checked switcher) is given, a switch_model tool is
+    added so natural-language switch requests go through the same key check as the
+    /model command — the model never has to reason about which keys exist."""
 
     @tool
     def status() -> str:
@@ -79,7 +82,23 @@ def build_tools(vault: Path) -> list:
         msg.reply_image(resolved, caption=caption or None)
         return f"sent {resolved.name} to the user"
 
-    return [status, reset_session, send_file, send_image]
+    tools = [status, reset_session, send_file, send_image]
+
+    if set_model is not None:
+        @tool
+        def switch_model(model: str) -> str:
+            """Switch the model when the user asks (e.g. "use gpt-5", "switch to
+            gemini"). `model` must be provider:model, e.g. openai:gpt-5,
+            anthropic:claude-sonnet-5, google_genai:gemini-3-pro. This checks that
+            the provider's API key is available and REFUSES (changing nothing) if
+            it isn't — return the result to the user verbatim; do not claim it
+            worked when it didn't. The change applies from the user's next
+            message."""
+            return set_model(model)
+
+        tools.append(switch_model)
+
+    return tools
 
 
 def session_lang() -> str:

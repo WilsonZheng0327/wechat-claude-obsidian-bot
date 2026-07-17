@@ -41,11 +41,23 @@ def _secrets_path():
     return (REPO / "secrets.env") if REPO else (CREDS.parent / "secrets.env")
 
 
+def _providers_present() -> tuple[list[str], list[str]]:
+    """(providers usable now, providers missing a key). ollama needs no key."""
+    present = [p for p, k in PROVIDER_KEYS.items() if k is None or os.environ.get(k)]
+    missing = [p for p, k in PROVIDER_KEYS.items() if k and not os.environ.get(k)]
+    return present, missing
+
+
 def _system_prompt(cfg: dict) -> str:
     reply_lang = "Chinese (中文)" if cfg["language"] == "zh" else "English"
     model = cfg["api_model"]
+    present, missing = _providers_present()
+    avail = ", ".join(present) or "none"
+    unavail = ", ".join(missing) or "none"
     return (
-        f"You are a note-capture assistant running on the model {model}.\n\n"
+        f"You are a note-capture assistant. You run on the deepagents harness, "
+        f"currently the model {model}. (There is a separate Claude Code harness "
+        "the user reaches with `wcob run-claude`; you are not it.)\n\n"
         "FILESYSTEM: your entire filesystem is the user's Obsidian vault — the "
         "root path `/` IS the vault. Use vault paths like `/Economics/Note.md` or "
         "`Ideas.md`. NEVER use operating-system paths such as `/Users/...`; they "
@@ -60,13 +72,16 @@ def _system_prompt(cfg: dict) -> str:
         "TOOLS: send_file / send_image deliver a vault file or image to the "
         "user's phone; status reports current settings; reset_session starts a "
         "fresh conversation.\n\n"
-        "SWITCHING MODELS: you cannot change your own model or provider, and you "
-        "cannot become a different backend such as Claude Code. If the user asks "
-        "to switch models, tell them to send the command `/model provider:model` "
-        "(e.g. `/model openai:gpt-5`, `/model anthropic:claude-sonnet-5`). To use "
-        "the Claude Code backend specifically, they restart the bot with `wcob "
-        "run-claude`. Do NOT edit any files or reset the session for these "
-        "requests — just tell them the command."
+        "SWITCHING MODELS: when the user asks to switch (e.g. \"use gpt-5\", "
+        "\"switch to gemini\"), call the switch_model tool with the provider:model "
+        "id — it checks the API key and REFUSES if the key is missing. Relay its "
+        "result verbatim; never claim a switch worked when the tool says it "
+        f"didn't. (Keys are currently set for: {avail}; not set for: {unavail}. "
+        "The user can add a missing key to secrets.env, or run /model themselves — "
+        "same effect.) The switch takes effect on their next message. Wanting the "
+        "Claude *Code* harness specifically — not just a Claude model — means "
+        "restarting the bot with `wcob run-claude`; you cannot do that from here. "
+        "Never edit files or reset the session for a switch request."
     )
 
 
@@ -169,7 +184,7 @@ class ApiBackend:
                 model=model,
                 backend=FilesystemBackend(root_dir=str(vault), virtual_mode=True),
                 system_prompt=system,
-                tools=api_tools.build_tools(vault),
+                tools=api_tools.build_tools(vault, set_model=self.set_model),
                 checkpointer=self._checkpointer_conn(),
             )
             self._agent_key = key

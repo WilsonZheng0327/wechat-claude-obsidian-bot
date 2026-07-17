@@ -155,10 +155,15 @@ The same capabilities exist twice, on purpose:
 
 `/model` is backend-aware: `commands.bind_backend()` (called in `bot.main`) gives
 it the active backend, and `/model [name]` delegates to `backend.set_model()` /
-`model_status()`. The API backend's `set_model` refuses to switch to a model
-whose provider key isn't in `secrets.env` — that's the "ensure a key exists"
-guarantee. Natural-language model switching works only on the Claude path (the
-agent edits `settings.toml`); on the API path `/model` is the way.
+`model_status()`. `set_model` refuses to switch (changing nothing) to a model
+whose provider key isn't in `secrets.env`, or to a model of the wrong harness —
+that's the "ensure a key exists" guarantee. Natural-language switching goes
+through the *same* `set_model`: the Claude agent edits `settings.toml` directly
+(prompted to stay Claude-only), and the API agent has a `switch_model` tool
+(`api_tools`, closed over `backend.set_model`) so a weak model never has to
+reason about which keys exist — the tool does the deterministic check and the
+agent relays its result. Each backend's system prompt states its harness and
+which models it can reach (the API prompt lists which provider keys are present).
 
 Adding a user-facing capability usually means touching both surfaces. Claude MCP
 tools must be in `agent_tools.ALLOWED_TOOLS` *and* `build_options`'s
