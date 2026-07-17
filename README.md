@@ -63,15 +63,22 @@ git clone https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot
 cd wechat-claude-obsidian-bot && ./setup.sh
 ```
 
-Or manually:
+Or manually. The base package ships **neither backend** — install with the
+extra for the one you want (and, for the API backend, your provider):
 
 ```sh
-pipx install git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot
-# from a checkout: pip install .
+# Claude backend — also install the `claude` CLI: https://code.claude.com
+pipx install "wechat-claude-obsidian-bot[claude] @ git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
+
+# API backend — add your provider extra: api-openai / api-google / api-anthropic
+pipx install "wechat-claude-obsidian-bot[api,api-openai] @ git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
+
+# from a checkout, same extras:  pip install '.[claude]'  or  pip install '.[api,api-openai]'
 ```
 
-Run `wcob` once — it creates a commented `config.toml` (every setting is
-documented there); set `vault` to your vault's path (or just
+Then point it at your vault. The first `wcob run-*` with no vault set writes
+a commented `config.toml` (every setting is documented there) and stops so
+you can fill it in; set `vault` to your vault's path (or just
 `export WCOB_VAULT=~/YourVault`). From a checkout it lands in **`config/`**,
 next to the code, alongside `prompt.md` and `settings.toml`; a plain
 `pipx`/`pip` install uses `~/.config/wechat-claude-obsidian-bot/` instead.
