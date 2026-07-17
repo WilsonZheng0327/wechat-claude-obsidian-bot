@@ -7,16 +7,19 @@ gateway, see spike/). Session handle is the SDK's session_id.
 """
 
 import asyncio
+import time
 from pathlib import Path
 
 from claude_agent_sdk import (
+    AssistantMessage,
     ClaudeAgentOptions,
     HookMatcher,
     ResultMessage,
+    ToolUseBlock,
     query,
 )
 
-from .. import agent_tools, preflight, settings
+from .. import agent_tools, preflight, runlog, settings
 from ..config import PROMPT, SETTINGS
 from ..prompting import load_capture_prompt
 from .base import TurnResult
@@ -140,19 +143,30 @@ async def _one_message(prompt: str):
 
 
 async def _run(prompt: str, options: ClaudeAgentOptions):
-    """One agent turn; returns (reply, session_id, cost_usd, num_turns)."""
+    """One agent turn; returns (reply, session_id, cost_usd, num_turns). Logs each
+    tool call as it streams in, then a one-line summary."""
     reply = "(no reply)"
     session_id = None
     cost = 0.0
     turns = 0
+    tok_in = tok_out = 0
+    start = time.perf_counter()
     async for message in query(prompt=_one_message(prompt), options=options):
-        if isinstance(message, ResultMessage):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, ToolUseBlock):
+                    runlog.tool_call(block.name, block.input)
+        elif isinstance(message, ResultMessage):
             if message.result:
                 reply = message.result
             session_id = message.session_id
             cost = message.total_cost_usd or 0
             turns = message.num_turns
-            print(f"   run done: {turns} turns, ${cost:.4f}", flush=True)
+            usage = message.usage or {}
+            tok_in = usage.get("input_tokens", 0)
+            tok_out = usage.get("output_tokens", 0)
+    runlog.summary(turns, time.perf_counter() - start, tok_in=tok_in,
+                   tok_out=tok_out, cost=cost)
     return reply, session_id, cost, turns
 
 
@@ -191,6 +205,7 @@ class ClaudeCodeBackend:
 
     def run_turn(self, prompt, *, resume, msg, cfg, vault) -> TurnResult:
         options = build_options(vault, cfg, resume, msg)
+        runlog.request(cfg["model"], resume=bool(resume))
         reply, session_id, cost, turns = asyncio.run(_run(prompt, options))
         return TurnResult(
             reply=reply,

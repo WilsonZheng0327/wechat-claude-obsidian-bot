@@ -13,15 +13,16 @@ import hashlib
 import os
 import sqlite3
 import sys
+import time
 import uuid
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from .. import settings
+from .. import runlog, settings
 from ..config import CREDS, REPO
 from ..prompting import capture_prompt
 from ..providers import PROVIDERS
@@ -95,8 +96,12 @@ def _final_text(messages) -> str:
     return "(no reply)"
 
 
-def _fmt_tokens(n: int) -> str:
-    return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+def _log_stream_message(m) -> None:
+    """Log tool calls (and tool failures) as the graph streams them out."""
+    for tc in getattr(m, "tool_calls", None) or []:
+        runlog.tool_call(tc.get("name", "?"), tc.get("args"))
+    if isinstance(m, ToolMessage) and getattr(m, "status", None) == "error":
+        runlog.tool_error(getattr(m, "name", "?") or "?")
 
 
 def _keyvar_for(model: str) -> str | None:
@@ -203,19 +208,33 @@ class ApiBackend:
             prev = len((agent.get_state(run_cfg).values or {}).get("messages", []))
         except Exception:
             prev = 0
-        result = agent.invoke({"messages": [{"role": "user", "content": prompt}]}, run_cfg)
-        messages = result.get("messages", [])
+        runlog.request(cfg["api_model"], resume=bool(resume))
+        start = time.perf_counter()
+        # Stream (not invoke) so tool calls log as they happen; the final state
+        # from the checkpointer is still the source of truth for the reply.
+        seen = set()
+        for update in agent.stream(
+            {"messages": [{"role": "user", "content": prompt}]}, run_cfg,
+            stream_mode="updates",
+        ):
+            for payload in (update or {}).values():
+                for m in (payload or {}).get("messages", []) if isinstance(payload, dict) else []:
+                    mid = getattr(m, "id", None) or id(m)
+                    if mid in seen:
+                        continue
+                    seen.add(mid)
+                    _log_stream_message(m)
+        messages = (agent.get_state(run_cfg).values or {}).get("messages", [])
         reply = _final_text(messages)
         new_ai = [m for m in messages[prev:] if isinstance(m, AIMessage)]
-        tokens = sum(
-            (m.usage_metadata or {}).get("input_tokens", 0)
-            + (m.usage_metadata or {}).get("output_tokens", 0)
-            for m in new_ai
-            if getattr(m, "usage_metadata", None)
-        )
-        print(f"   run done: {len(new_ai)} turns, {tokens} tokens", flush=True)
+        tok_in = sum((m.usage_metadata or {}).get("input_tokens", 0)
+                     for m in new_ai if getattr(m, "usage_metadata", None))
+        tok_out = sum((m.usage_metadata or {}).get("output_tokens", 0)
+                      for m in new_ai if getattr(m, "usage_metadata", None))
+        runlog.summary(len(new_ai), time.perf_counter() - start,
+                       tok_in=tok_in, tok_out=tok_out)
         return TurnResult(
             reply=reply,
             handle=thread_id,
-            footer=f"[{_fmt_tokens(tokens)} tokens · {len(new_ai)} turns]",
+            footer=f"[{runlog.fmt_tokens(tok_in + tok_out)} tokens · {len(new_ai)} turns]",
         )
