@@ -75,9 +75,11 @@ class SetupApp(App):
     #msg { margin-top: 1; height: auto; }
     #nav { height: 3; margin-top: 1; align-horizontal: right; }
     #nav Button { margin-left: 2; }
-    #keyrow { height: auto; margin-top: 1; }
-    #keyrow #key { width: 1fr; }
-    #keyrow Button { margin-left: 1; }
+    #keyrow { height: auto; margin-top: 1; align-vertical: middle; }
+    /* margin-top:0 overrides the general `Input` rule so the field lines up with
+       the Test button instead of sitting one row lower. */
+    #keyrow #key { width: 1fr; margin-top: 0; }
+    #keyrow Button { margin-left: 1; margin-top: 0; }
     Input { margin-top: 1; }
     RadioSet { height: auto; width: 1fr; }
     #toosmall { display: none; padding: 2 4; text-align: center; }
