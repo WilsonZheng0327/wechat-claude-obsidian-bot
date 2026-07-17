@@ -44,8 +44,9 @@ _PKG = {"openai": ("langchain_openai", "api-openai"),
         "anthropic": ("langchain_anthropic", "api-anthropic"),
         "google_genai": ("langchain_google_genai", "api-google")}
 
-# Card renders at 20 rows (fixed #body height + chrome); + 1 for the footer.
-MIN_W, MIN_H = 60, 21
+# #body is fixed at 13 rows (the API-keys page, the tallest, shown in full — no
+# scrolling). Card is then 23 rows + 1 footer = 24; that's the uniform minimum.
+MIN_W, MIN_H = 60, 24
 
 
 def _secrets_path() -> Path:
@@ -66,15 +67,17 @@ class SetupApp(App):
     Screen { align: center middle; }
     #card { width: 72; max-width: 92%; height: auto; border: round $primary; padding: 1 2; }
     #heading { text-style: bold; margin-bottom: 1; }
-    /* Fixed height so every step's card is the same size; shorter steps just
-       pad below. Keep in sync with MIN_H so the min-size guard is uniform. */
-    #body { height: 10; overflow-y: auto; }
-    .sub { color: $text-muted; margin-bottom: 1; }
+    /* Fixed height = the tallest step (API keys), so every card is the same size
+       and nothing ever scrolls. Keep in sync with MIN_H (BODY_H below). */
+    #body { height: 13; overflow: hidden; }
+    .sub { color: $text-muted; }
     .muted { color: $text-muted; margin-top: 1; }
     #msg { margin-top: 1; height: auto; }
     #nav { height: 3; margin-top: 1; align-horizontal: right; }
     #nav Button { margin-left: 2; }
-    #testrow { height: auto; margin-top: 1; }
+    #keyrow { height: auto; margin-top: 1; }
+    #keyrow #key { width: 1fr; }
+    #keyrow Button { margin-left: 1; }
     Input { margin-top: 1; }
     RadioSet { height: auto; width: 1fr; }
     #toosmall { display: none; padding: 2 4; text-align: center; }
@@ -150,12 +153,12 @@ class SetupApp(App):
     def _build_keys(self) -> list:
         have = ", ".join(f"✓ {PROVIDERS[p]['label']}" for p in self.keys) or "none yet"
         return [
-            Static(f"Add a key for each provider you want — it's tested before saving. "
-                   f"Configured: {have}", classes="sub"),
+            Static("Add a key per provider — it's tested before saving.", classes="sub"),
+            Static(f"Configured: {have}", classes="sub"),
             Select([(lbl, p) for p, lbl in _KEYED], value=_KEYED[0][0],
                    allow_blank=False, id="prov"),
-            Input(placeholder="paste API key", password=True, id="key"),
-            Horizontal(Button("Test key", id="test"), id="testrow"),
+            Horizontal(Input(placeholder="paste API key", password=True, id="key"),
+                       Button("Test", id="test", variant="primary"), id="keyrow"),
             Static("", id="msg"),
         ]
 
