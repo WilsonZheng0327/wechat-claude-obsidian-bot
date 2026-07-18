@@ -14,7 +14,7 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-from .. import commands, session
+from .. import commands, schedules, session
 
 # Set per message by ApiBackend.run_turn; read by the send_* tools.
 _current_msg: ContextVar = ContextVar("wcob_current_msg", default=None)
@@ -82,7 +82,42 @@ def build_tools(vault: Path, set_model=None) -> list:
         msg.reply_image(resolved, caption=caption or None)
         return f"sent {resolved.name} to the user"
 
-    tools = [status, reset_session, send_file, send_image]
+    @tool
+    def schedule(prompt: str, at: str = "", in_minutes: int = 0,
+                 time: str = "", days: str = "") -> str:
+        """Schedule a task to run later and message the user the result. One-time:
+        pass `at` (absolute LOCAL ISO time, e.g. 2026-07-20T09:00; today's date is
+        in your context) or `in_minutes` (relative, e.g. 120 for 'in 2 hours').
+        Recurring: pass `time` (24h LOCAL HH:MM) with optional `days` ('daily' or
+        mon,tue,wed,thu,fri,sat,sun). `prompt` is the instruction to yourself for
+        when it fires. Use for 'remind me at 9' or 'every morning summarize'."""
+        msg = _current_msg.get()
+        if msg is None:
+            return "error: no active user to schedule for"
+        job, err = schedules.create(
+            prompt, msg.from_user, at=at or None,
+            in_minutes=in_minutes or None, time=time or None, days=days or None,
+        )
+        return f"error: {err}" if err else schedules.confirm(job)
+
+    @tool
+    def list_schedules() -> str:
+        """List the user's scheduled tasks — pending, recurring, and past
+        (done/cancelled) ones, since the store is kept as history. Same as the
+        /schedules command."""
+        msg = _current_msg.get()
+        to = msg.from_user if msg is not None else None
+        return schedules.format_list(schedules.list_for(to), session_lang())
+
+    @tool
+    def cancel_schedule(id: str) -> str:
+        """Cancel a scheduled task by its id (from list_schedules). The entry
+        stays in history marked cancelled. Same as /unschedule <id>."""
+        _, message = schedules.cancel(id)
+        return message
+
+    tools = [status, reset_session, send_file, send_image,
+             schedule, list_schedules, cancel_schedule]
 
     if set_model is not None:
         @tool

@@ -4,7 +4,7 @@ Anything that just reports or resets bot state lives here; unknown /words
 fall through to the agent like normal text.
 """
 
-from . import session, settings
+from . import schedules, session, settings
 from .config import CREDS, MAX_MEDIA_MB, PROMPT, SESSION_WINDOW_MINUTES, SETTINGS, VAULT
 
 # The running backend, set by bot.main() so backend-specific commands (/model)
@@ -66,23 +66,40 @@ def _model(lang: str, arg: str) -> str:
     return _backend.set_model(arg)
 
 
+def _schedules(lang: str) -> str:
+    return schedules.format_list(schedules.list_for(), lang)
+
+
+def _unschedule(lang: str, arg: str) -> str:
+    if not arg:
+        return "用法：/unschedule <id>（用 /schedules 查看 id）" if lang == "zh" \
+            else "Usage: /unschedule <id>  (see ids with /schedules)"
+    _, message = schedules.cancel(arg.strip())
+    return message
+
+
 def _help(lang: str) -> str:
     if lang == "zh":
         return (
             "/status（/settings /config /设置 /状态）— 当前设置与会话\n"
             "/model（/模型）[名称] — 查看或切换模型（会检查所需 API key）\n"
             "/new（/reset /新会话）— 重置会话，下一条从零开始\n"
+            "/schedules（/定时）— 查看定时任务（含历史）\n"
+            "/unschedule <id>（/取消）— 取消某个定时任务\n"
             "/help（/帮助）— 本帮助\n"
-            "其他消息（文字、链接、语音、图片、文件）都交给 agent 处理；"
-            "也可以直接说「换成 haiku」「说中文」之类来改设置。"
+            "其他消息（文字、链接、语音、图片、文件）都交给 agent 处理；也可以直接"
+            "说「换成 haiku」「说中文」「每天早上八点总结我的笔记」之类。"
         )
     return (
         "/status (/settings, /config) — current settings & session\n"
         "/model [name] — show or switch the model (checks the API key it needs)\n"
         "/new (/reset) — reset the session, next message starts fresh\n"
+        "/schedules — list scheduled tasks (kept as history)\n"
+        "/unschedule <id> — cancel a scheduled task\n"
         "/help — this help\n"
         "Everything else (text, links, voice, images, files) goes to the agent; "
-        "you can also just say things like \"switch to haiku\" or \"说中文\"."
+        "you can also just say things like \"switch to haiku\", \"说中文\", or "
+        "\"every morning at 8, summarize my notes\"."
     )
 
 
@@ -96,12 +113,17 @@ _COMMANDS = {
     "/new": _new,
     "/reset": _new,
     "/新会话": _new,
+    # Only the plural lists; "/schedule <do X every day>" falls through to the
+    # agent, which creates it via the schedule tool.
+    "/schedules": _schedules,
+    "/定时": _schedules,
     "/help": _help,
     "/帮助": _help,
 }
 
 # Commands that take an argument (the rest of the message), handled separately.
 _MODEL_CMDS = ("/model", "/模型")
+_UNSCHEDULE_CMDS = ("/unschedule", "/取消")
 
 
 def command_reply(text: str) -> str | None:
@@ -114,5 +136,7 @@ def command_reply(text: str) -> str | None:
     lang = settings.load()["language"]
     if word in _MODEL_CMDS:
         return _model(lang, rest)
+    if word in _UNSCHEDULE_CMDS:
+        return _unschedule(lang, rest)
     fn = _COMMANDS.get(word)
     return fn(lang) if fn else None

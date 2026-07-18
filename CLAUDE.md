@@ -154,14 +154,17 @@ those in too.
 The same capabilities exist twice, on purpose:
 
 - [commands.py](src/wechat_claude_obsidian_bot/commands.py) — `/status`, `/new`,
-  `/model`, `/help` (plus Chinese aliases), answered by the bot *before* the
-  agent runs: instant and free. Unknown `/words` fall through to the agent.
+  `/model`, `/schedules`, `/unschedule <id>`, `/help` (plus Chinese aliases),
+  answered by the bot *before* the agent runs: instant and free. Unknown `/words`
+  fall through to the agent — note `/schedule` (singular) is deliberately *not* a
+  command, so "/schedule … every day" reaches the agent to create via its tool.
 - [agent_tools.py](src/wechat_claude_obsidian_bot/agent_tools.py) (Claude) /
   [api_tools.py](src/wechat_claude_obsidian_bot/backends/api_tools.py) (API) —
   the same things as agent tools (`status`, `reset_session`) so natural language
   works too, plus `send_file`/`send_image`, the only way the agent replies with
-  anything but text. Two files because agent_tools imports the claude SDK; keep
-  them in sync.
+  anything but text, and `schedule`/`list_schedules`/`cancel_schedule` (see
+  Scheduling). Two files because agent_tools imports the claude SDK; keep them in
+  sync.
 
 `/model` is backend-aware: `commands.bind_backend()` (called in `bot.main`) gives
 it the active backend, and `/model [name]` delegates to `backend.set_model()` /
@@ -195,6 +198,44 @@ silently fresh conversation) rather than erroring. Note the
 `suppress_remember()` wrinkle: the agent's `reset_session` tool clears state
 *mid-run*, and without suppression `handle()` would immediately re-store the
 very session that was just cleared.
+
+### Scheduling — the one place the bot acts unprompted
+
+The bot is otherwise purely reactive; scheduling is the exception, and it works
+because the iLink SDK's sends take an explicit target (`bot.send_text(to, …)`),
+not just a reply context. A scheduled job is one headless agent turn whose
+result is pushed to the user who created it.
+
+- [schedules.py](src/wechat_claude_obsidian_bot/schedules.py) — the store and
+  job model, a JSON list at `CREDS.parent/schedules.json`, **backend-neutral** (a
+  schedule doesn't care which backend runs it — unlike `session.py`, so it's
+  *not* per-backend). It is also the **history**: a one-time job is never deleted
+  when it fires, it moves to status `done` (`cancel` → `cancelled`); the file
+  keeps every task ever made. Times are naive **local** datetimes. Mutations take
+  a lock because the scheduler thread (`mark_ran`) and the message thread
+  (`create`/`cancel` via the tools) both write it.
+- [scheduler.py](src/wechat_claude_obsidian_bot/scheduler.py) — a daemon thread
+  that polls `schedules.due(now)` every ~20s and calls back into `bot.py`. It
+  decides *when*; the callback owns *how*. A job is `mark_ran` whether the
+  callback succeeds or throws, so a failing job advances instead of re-firing
+  every tick. Overdue jobs (bot was down) fire once on the next tick.
+- [bot.py](src/wechat_claude_obsidian_bot/bot.py) — `run_scheduled` builds an
+  `OutboundMessage` (a minimal stand-in exposing `from_user` + `reply_*` backed
+  by `bot.send_*`, so the same `send_file`/`send_image` tools and reply path work
+  with no real message) and runs the turn with `resume=None`/`remember=False`, so
+  scheduled runs stay **off the interactive session**. A module `run_lock`
+  serializes scheduled turns with message-driven ones — the vault and agent
+  aren't safe to drive concurrently; both `handle()` and `run_scheduled` hold it
+  around the agent turn. `agent_reply()` is the shared run-one-turn helper.
+- Tools `schedule`/`list_schedules`/`cancel_schedule` in both tool files;
+  `schedule` reads the creator's id from the (real or Outbound) `msg.from_user`.
+  It takes `at` (absolute ISO) or `in_minutes` (relative) for one-time, or
+  `time`+`days` for recurring — `in_minutes` exists so the agent needn't know the
+  wall clock for "in 2 hours". `/schedules` + `/unschedule` are the command twins.
+
+Because `schedules.json` derives from `CREDS.parent` like `session.json`/
+`thread.json`/`.sync`, it belongs beside the credentials — don't move it into the
+repo (same reasoning as those).
 
 ### Permissions (Claude backend)
 

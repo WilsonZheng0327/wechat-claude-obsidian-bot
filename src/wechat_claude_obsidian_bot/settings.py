@@ -107,6 +107,10 @@ STRINGS = {
         "en": "I can't watch videos, so I don't capture them — a screenshot or a few words works.",
         "zh": "我看不了视频，所以不收录——发张截图或几句话描述就行。",
     },
+    "scheduled_prefix": {
+        "en": "⏰ Scheduled task",
+        "zh": "⏰ 定时任务",
+    },
 }
 
 

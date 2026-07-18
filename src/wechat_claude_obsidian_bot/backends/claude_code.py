@@ -106,8 +106,13 @@ def build_options(vault, cfg: dict, resume: str | None = None, msg=None) -> Clau
         f"since it would break the next run. Use the wcob status tool to report "
         f"settings, the wcob reset_session tool to start over, and the wcob "
         f"send_file / send_image tools to send a vault file or image to the user's "
-        f"phone. The user can also type /status, /model, /new, or /help — the bot "
-        f"answers those itself, instantly and free.{git_note})"
+        f"phone. To run something later or on a repeat (\"remind me at 9\", \"every "
+        f"morning summarize my notes\"), use the wcob schedule tool (one-time via "
+        f"at/in_minutes, recurring via time/days — times are this machine's local "
+        f"zone), and list_schedules / cancel_schedule to review or cancel; when a "
+        f"scheduled task fires you'll get its instruction prefixed as such. The "
+        f"user can also type /status, /model, /new, /schedules, /unschedule, or "
+        f"/help — the bot answers those itself, instantly and free.{git_note})"
     )
     return ClaudeAgentOptions(
         cwd=vault,

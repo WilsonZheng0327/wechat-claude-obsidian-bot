@@ -122,6 +122,16 @@ one (default 15; 0 disables) continue the same agent session — send a
 photo, then "put that in my Travel notes". After a longer gap, the next
 message starts fresh.
 
+**Scheduling.** Ask in plain language and the bot runs a task later — once
+or on a repeat — and messages you the result: "in two hours, remind me to
+call the dentist", "every weekday at 8am, summarize the notes I added
+yesterday and flag open questions". One-time and recurring are both
+supported, and the store is kept as **history** — a one-time task stays
+listed (marked done) after it fires rather than vanishing. Times use the
+bot machine's local timezone. `/schedules` lists everything (pending,
+recurring, and past); `/unschedule <id>` cancels one. Scheduled runs use a
+fresh session, so they never disturb your live conversation.
+
 **Commands** — answered instantly by the bot itself, no agent run:
 
 - `/status` (`/settings`, `/config`, `/状态`, `/设置`) — model, language,
@@ -130,6 +140,8 @@ message starts fresh.
   checks that the provider's key is in `secrets.env` first and refuses (without
   changing anything) if it's missing, telling you which key to add.
 - `/new` (`/reset`, `/新会话`) — the next message starts fresh.
+- `/schedules` (`/定时`) — list scheduled tasks, including past ones (history).
+- `/unschedule <id>` (`/取消`) — cancel a scheduled task by its id.
 - `/help` (`/帮助`)
 
 Anything else starting with `/` goes to the agent as normal text. The
