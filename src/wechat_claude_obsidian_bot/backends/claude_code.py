@@ -2,8 +2,10 @@
 
 This is the original path, unchanged in behavior — build_options() and the run
 loop moved here verbatim from claude_bot.py, now returning a TurnResult. Needs
-the `claude` CLI installed; auth via claude.ai login or any API key (including a
-gateway, see spike/). Session handle is the SDK's session_id.
+the `claude` CLI installed; auth via claude.ai login or any API key (including
+an Anthropic-compatible gateway pointed at by ANTHROPIC_BASE_URL, which runs a
+non-Claude model through the full Claude Code harness). Session handle is the
+SDK's session_id.
 """
 
 import asyncio

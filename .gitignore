@@ -1,6 +1,4 @@
 .venv/
-.venv-spike/
-spike/proxy.log
 config.toml
 secrets.env
 schedules.json
