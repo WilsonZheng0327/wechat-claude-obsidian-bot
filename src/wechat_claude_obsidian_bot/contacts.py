@@ -17,11 +17,16 @@ the next inbound message refreshes it.
 
 import json
 import threading
+import time
 
 from .config import CREDS
 
 STATE = CREDS.parent / "context_tokens.json"
 _lock = threading.Lock()
+
+# Entries are {user: {"token": str, "ts": epoch}}. `ts` is when this token was
+# last seen on an inbound message, so `wcob ping` can report the token's age
+# while probing how long Tencent keeps one valid.
 
 
 def _read() -> dict:
@@ -32,18 +37,33 @@ def _read() -> dict:
         return {}
 
 
+def _entry(user: str | None) -> dict | None:
+    e = _read().get(user) if user else None
+    return e if isinstance(e, dict) else None
+
+
 def remember(user: str | None, token: str | None) -> None:
-    """Store (or refresh) the context token for a user seen on an inbound message."""
+    """Store the context token for a user seen on an inbound message. The ts is
+    refreshed only when the token actually changes, so it marks when the current
+    token was issued."""
     if not user or not token:
         return
     with _lock:
         data = _read()
-        if data.get(user) == token:
-            return
-        data[user] = token
+        cur = data.get(user)
+        if isinstance(cur, dict) and cur.get("token") == token:
+            return  # unchanged — keep the original ts
+        data[user] = {"token": token, "ts": time.time()}
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def token_for(user: str | None) -> str | None:
-    return _read().get(user) if user else None
+    e = _entry(user)
+    return e["token"] if e else None
+
+
+def age_seconds(user: str | None) -> float | None:
+    """Seconds since this user's stored token was issued, or None if unknown."""
+    e = _entry(user)
+    return (time.time() - e["ts"]) if e and e.get("ts") else None

@@ -11,6 +11,7 @@ everything Claude- or deepagents-specific lives there. cli.py picks the backend.
 """
 
 import json
+import sys
 import threading
 import traceback
 
@@ -60,6 +61,45 @@ def _startup_notify(bot, backend) -> None:
         traceback.print_exc()
         print("startup: couldn't send the test message — the saved context token "
               "may have expired; it refreshes next time you message the bot.", flush=True)
+
+
+def _fmt_age(seconds: float | None) -> str:
+    if seconds is None:
+        return "age unknown"
+    if seconds < 90:
+        return f"{seconds:.0f}s old"
+    if seconds < 5400:
+        return f"{seconds / 60:.0f} min old"
+    return f"{seconds / 3600:.1f} h old"
+
+
+def ping() -> None:
+    """`wcob ping`: send the owner a message using the stored context token and
+    report whether it worked — a probe for how long a token stays valid. Message
+    the bot once to capture a fresh token, then run this at intervals WITHOUT
+    messaging again; the first failure brackets the token's lifetime."""
+    import datetime
+
+    bot = WeixinBot(credentials_file=require_creds())
+    to = _owner_chat()
+    if not to:
+        sys.exit("ping: no owner userId in creds — run `wcob login` first.")
+    token = contacts.token_for(to)
+    if not token:
+        sys.exit("ping: no stored context token yet. Start the bot (`wcob run-*`), "
+                 "send it one message from your phone, stop it, then `wcob ping`.")
+    age = contacts.age_seconds(to)
+    stamp = datetime.datetime.now().strftime("%H:%M:%S")
+    print(f"pinging owner with a token that is {_fmt_age(age)} …", flush=True)
+    try:
+        bot.send_text(to, f"🔎 token test at {stamp} (token {_fmt_age(age)})", context_token=token)
+        print(f"OK: send accepted — token still valid at {_fmt_age(age)}. "
+              "Check your phone, then run `wcob ping` again later.", flush=True)
+    except Exception as e:
+        print(f"FAILED: token rejected at {_fmt_age(age)} — it has likely expired.\n"
+              f"  {type(e).__name__}: {e}\n"
+              "The valid lifetime is between your last successful ping's age and this one.",
+              flush=True)
 
 
 class OutboundMessage:

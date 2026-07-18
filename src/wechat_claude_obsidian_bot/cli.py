@@ -11,6 +11,8 @@ commands:
   run-api      start the bot on any model via an API key (deepagents)
   login        pair with WeChat — prints a QR code to scan; re-run to re-pair
   echo         diagnostic echo bot: verifies the pairing without an agent
+  ping         send yourself a test message with the stored context token
+               (probe how long a token stays valid — see `wcob ping --help`)
 
 `wcob` with no command, or `wcob run`, is a shortcut for `run-claude`.
 `wcob <command> --help` shows command details.
@@ -65,6 +67,8 @@ def main() -> None:
         from .login import main as runner
     elif cmd == "echo":
         from .echo_bot import main as runner
+    elif cmd == "ping":
+        from .bot import ping as runner
     else:
         sys.exit(f"wcob: unknown command {cmd!r}\n\n{USAGE}")
     sys.argv = [f"wcob {cmd}", *args[1:]]  # commands parse their own flags

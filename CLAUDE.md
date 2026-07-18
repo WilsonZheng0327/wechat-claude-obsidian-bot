@@ -21,6 +21,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .             # manual dev ins
 .venv/bin/wcob setup    # full-screen config wizard (backend, keys, model, vault); needs the gui extra
 .venv/bin/wcob login    # QR pairing -> creds.json; needed once before `run`
 .venv/bin/wcob echo     # echo bot: exercises the iLink plumbing without Claude
+.venv/bin/wcob ping     # send yourself a msg with the stored token; probes token TTL
 ```
 
 `setup.sh` and the wizard split work by a handshake: the shell owns what must
@@ -208,7 +209,9 @@ cannot cold-message anyone. [contacts.py](src/wechat_claude_obsidian_bot/contact
 mirrors each inbound sender's token to `CREDS.parent/context_tokens.json` (via the
 `seen()` call in every handler) and proactive sends pass it explicitly. It's
 best-effort — a token may expire between sessions; a stale send just fails and is
-skipped, and the next inbound message refreshes it.
+skipped, and the next inbound message refreshes it. How long a token stays valid
+is a Tencent unknown; `wcob ping` (bot.ping) probes it — it sends with the stored
+token and reports the token's age, so running it at intervals brackets the TTL.
 
 - (1) **Startup ping** — `bot._startup_notify` messages the owner "wcob is up
   (backend · model)" on every start. Target is `_owner_chat()` = `userId` in
