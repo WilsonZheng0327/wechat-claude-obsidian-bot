@@ -102,6 +102,12 @@ wcob echo        # plumbing test without an agent — just echoes
 later without restarting the process by messaging `/model` (see below); switch
 *backends* by stopping and starting the other `run-*` command.
 
+On every start the bot tries to send a short "wcob is up" message to your phone
+(the account that paired via `wcob login`), as proof of life with the model it's
+on. WeChat only lets the bot send inside a recent conversation, so this works
+once you've messaged it at least once — on a brand-new pairing, send it anything
+first and later restarts will greet you.
+
 Credentials land in `~/.local/share/wechat-claude-obsidian-bot/creds.json`;
 anyone with that file can act as your bot — keep it private.
 

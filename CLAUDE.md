@@ -201,10 +201,23 @@ very session that was just cleared.
 
 ### Scheduling — the one place the bot acts unprompted
 
-The bot is otherwise purely reactive; scheduling is the exception, and it works
-because the iLink SDK's sends take an explicit target (`bot.send_text(to, …)`),
-not just a reply context. A scheduled job is one headless agent turn whose
-result is pushed to the user who created it.
+The bot is otherwise purely reactive; two things act unprompted, and both hit the
+same wall: **iLink won't send without a `context_token`, which only arrives on an
+inbound message** (the SDK caches it in memory, empty on a fresh process). So you
+cannot cold-message anyone. [contacts.py](src/wechat_claude_obsidian_bot/contacts.py)
+mirrors each inbound sender's token to `CREDS.parent/context_tokens.json` (via the
+`seen()` call in every handler) and proactive sends pass it explicitly. It's
+best-effort — a token may expire between sessions; a stale send just fails and is
+skipped, and the next inbound message refreshes it.
+
+- (1) **Startup ping** — `bot._startup_notify` messages the owner "wcob is up
+  (backend · model)" on every start. Target is `_owner_chat()` = `userId` in
+  creds.json (who scanned the QR, same `@im.wechat` form as a from_user); it fires
+  only if a stored token exists, i.e. **after the owner has messaged the bot at
+  least once** — never on a brand-new pairing.
+- (2) **Scheduling** — a scheduled job is one headless agent turn whose result is
+  pushed to the user who created it, via `OutboundMessage(bot, to, token)`. Works
+  in-session off the live cache; across a restart it needs the persisted token.
 
 - [schedules.py](src/wechat_claude_obsidian_bot/schedules.py) — the store and
   job model, a JSON list at `config.SCHEDULES` (CONFIG_DIR/schedules.json — i.e.

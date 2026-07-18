@@ -111,6 +111,10 @@ STRINGS = {
         "en": "⏰ Scheduled task",
         "zh": "⏰ 定时任务",
     },
+    "startup_ping": {
+        "en": "✅ wcob is up and listening ({backend} · {model}). Send me anything.",
+        "zh": "✅ wcob 已启动并在监听（{backend} · {model}）。随时给我发消息。",
+    },
 }
 
 
