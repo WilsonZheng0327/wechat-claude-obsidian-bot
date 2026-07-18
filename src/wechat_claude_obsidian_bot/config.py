@@ -40,6 +40,12 @@ Settings:
   settings (env WCOB_SETTINGS) — runtime settings (model, reply language) the
                             agent edits itself on request; seeded on first run.
                             Default: CONFIG_DIR/settings.toml
+  schedules (env WCOB_SCHEDULES) — scheduled-tasks store (schedules.py). Runtime
+                            state, created when the first task is scheduled;
+                            gitignored, and not reachable by the agent's file
+                            tools (the PreToolUse hook allows only prompt.md and
+                            settings.toml in CONFIG_DIR).
+                            Default: CONFIG_DIR/schedules.json
 """
 
 import os
@@ -143,6 +149,12 @@ VAULT = _path_setting("WCOB_VAULT", "vault", None)
 CREDS = _path_setting("WCOB_CREDS", "creds", _default_creds)
 PROMPT = _path_setting("WCOB_PROMPT", "prompt", CONFIG_DIR / "prompt.md")
 SETTINGS = _path_setting("WCOB_SETTINGS", "settings", CONFIG_DIR / "settings.toml")
+# Scheduled-tasks store (schedules.py). In CONFIG_DIR beside settings.toml — so
+# it's in the checkout — but it's runtime state, not a setting (no env/config
+# override), and it's gitignored. The PreToolUse hook still denies the agent's
+# file tools here (only prompt.md/settings.toml are reachable), so the agent
+# manages schedules through its tools, never by editing this file directly.
+SCHEDULES = _path_setting("WCOB_SCHEDULES", "schedules", CONFIG_DIR / "schedules.json")
 MAX_MEDIA_MB = _int_setting("WCOB_MAX_MEDIA_MB", "max_media_mb", 50)
 SESSION_WINDOW_MINUTES = _int_setting(
     "WCOB_SESSION_WINDOW_MINUTES", "session_window_minutes", 15
@@ -171,6 +183,11 @@ CONFIG_SEED = """\
 # Runtime settings (Claude model, reply language) — a small TOML file the
 # bot edits itself when you message it "switch to haiku" / "说中文".
 # settings = "settings.toml"
+
+# Scheduled-tasks store — runtime state, created when you first schedule
+# something ("remind me at 9", "every morning summarize"). Relative = next to
+# this file. Gitignored; you don't normally edit it by hand.
+# schedules = "schedules.json"
 
 # Refuse to download incoming media (images/files/voice) larger than this.
 # max_media_mb = 50

@@ -1,8 +1,11 @@
 """Persistent store of scheduled tasks — one-time and recurring.
 
 Each job is a headless agent turn to run at a time, its result pushed to the
-user who created it (see bot.OutboundMessage). The store is a JSON list next to
-creds.json, backend-neutral (a schedule doesn't care which backend runs it).
+user who created it (see bot.OutboundMessage). The store is a JSON list in
+CONFIG_DIR (config/schedules.json in a checkout), backend-neutral (a schedule
+doesn't care which backend runs it). It's gitignored and — unlike prompt.md /
+settings.toml — not reachable by the agent's file tools, so the agent changes
+it only through its schedule/cancel tools.
 
 It is also the **history**: a one-time job is never removed when it fires — it
 just moves to status "done". Cancelling sets "cancelled". So the file always
@@ -22,9 +25,9 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .config import CREDS
+from .config import SCHEDULES
 
-STATE = CREDS.parent / "schedules.json"
+STATE = SCHEDULES
 
 _lock = threading.Lock()
 

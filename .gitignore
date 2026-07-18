@@ -3,6 +3,7 @@
 spike/proxy.log
 config.toml
 secrets.env
+schedules.json
 creds*
 __pycache__/
 *.pyc

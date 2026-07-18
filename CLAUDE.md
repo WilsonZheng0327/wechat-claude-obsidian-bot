@@ -207,9 +207,13 @@ not just a reply context. A scheduled job is one headless agent turn whose
 result is pushed to the user who created it.
 
 - [schedules.py](src/wechat_claude_obsidian_bot/schedules.py) — the store and
-  job model, a JSON list at `CREDS.parent/schedules.json`, **backend-neutral** (a
+  job model, a JSON list at `config.SCHEDULES` (CONFIG_DIR/schedules.json — i.e.
+  `config/schedules.json` in a checkout, gitignored), **backend-neutral** (a
   schedule doesn't care which backend runs it — unlike `session.py`, so it's
-  *not* per-backend). It is also the **history**: a one-time job is never deleted
+  *not* per-backend). It sits in CONFIG_DIR beside settings.toml but the
+  PreToolUse hook still denies the agent's file tools there (only prompt.md /
+  settings.toml are reachable), so the agent touches it only via its tools. It is
+  also the **history**: a one-time job is never deleted
   when it fires, it moves to status `done` (`cancel` → `cancelled`); the file
   keeps every task ever made. Times are naive **local** datetimes. Mutations take
   a lock because the scheduler thread (`mark_ran`) and the message thread
@@ -233,9 +237,11 @@ result is pushed to the user who created it.
   `time`+`days` for recurring — `in_minutes` exists so the agent needn't know the
   wall clock for "in 2 hours". `/schedules` + `/unschedule` are the command twins.
 
-Because `schedules.json` derives from `CREDS.parent` like `session.json`/
-`thread.json`/`.sync`, it belongs beside the credentials — don't move it into the
-repo (same reasoning as those).
+`schedules.json` lives in CONFIG_DIR (not beside creds like `session.json`/
+`thread.json`/`.sync`) because it's user-inspectable schedule data, not a
+credential or an opaque handle. It's gitignored, and the confinement hook keeps
+the agent's file tools out of it, so it stays in the checkout without becoming
+either a leak or something a prompt injection could rewrite directly.
 
 ### Permissions (Claude backend)
 
