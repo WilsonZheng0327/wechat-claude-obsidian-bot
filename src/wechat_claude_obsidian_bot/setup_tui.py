@@ -22,12 +22,13 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
+from textual.screen import Screen
 from textual.widgets import (
     Button, Footer, Input, OptionList, RadioButton, RadioSet, Select, Static,
 )
 
 from . import settings
-from .config import CONFIG_SEED, CREDS, REPO, default_config_path
+from .config import CONFIG_SEED, CREDS, REPO, SECRETS, default_config_path
 from .providers import PROVIDERS
 from .setup_keys import read_secrets, validate, write_key
 
@@ -47,13 +48,20 @@ _PKG = {"openai": ("langchain_openai", "api-openai"),
         "anthropic": ("langchain_anthropic", "api-anthropic"),
         "google_genai": ("langchain_google_genai", "api-google")}
 
-# #body is fixed at 15 rows (the vault path picker, the tallest, shown in full).
-# Card is then 25 rows + 1 footer = 26; that's the uniform minimum.
-MIN_W, MIN_H = 60, 26
+# The blue card is a FIXED size across every wizard step and the pairing /
+# dashboard screens, so nothing resizes or scrolls between steps. The size is
+# picked to fit the tallest content — the QR page (a login-URL QR is ~45×23
+# half-blocks; with the instructions beside it, the card holds it with room).
+# The window must be at least MIN_W×MIN_H to show the card; below that a "too
+# small" note takes over. Keep CARD_* and MIN_* / the #card CSS in sync.
+CARD_W, CARD_H = 90, 34
+MIN_W, MIN_H = 92, 36
+TOO_SMALL = f"Terminal too small.\nResize to at least {MIN_W}×{MIN_H} and it'll come back."
 
 
 def _secrets_path() -> Path:
-    return (REPO / "secrets.env") if REPO else Path("secrets.env")
+    return SECRETS  # single source of truth in config.py (was cwd-relative here,
+    # which disagreed with the backend when REPO was None)
 
 
 def _list_dirs(text: str, limit: int = 200) -> list[str]:
@@ -88,15 +96,19 @@ def _write_vault(vault: str) -> None:
     path.write_text(seed, encoding="utf-8")
 
 
-class SetupApp(App):
-    CSS = """
+# The wizard's stylesheet, shared so the unified app (tui.WcobApp) styles the
+# pairing + dashboard screens with the SAME blue card. Lives on the App (both
+# SetupApp and WcobApp set it as CSS); the screens inherit it.
+WIZARD_CSS = """
     Screen { align: center middle; }
-    #card { width: 72; max-width: 92%; height: auto; border: round $primary; padding: 1 2; }
+    /* Fixed size (== CARD_W x CARD_H) so every step and screen is identical and
+       nothing between them resizes. Sized to fit the tallest content (the QR),
+       so no step scrolls. */
+    #card { width: 90; height: 34; border: round $primary; padding: 1 2; }
     #heading { text-style: bold; margin-bottom: 1; }
-    /* Fixed height = the tallest step (the vault path picker, with its folder
-       list), so every card is the same size and nothing scrolls except the
-       folder list itself. Keep in sync with MIN_H. */
-    #body { height: 15; overflow: hidden; }
+    /* Body fills the rest of the fixed card; content is top-aligned, so shorter
+       steps just leave space below rather than changing the card size. */
+    #body { height: 1fr; overflow: hidden; }
     /* Description text sits at the top of each step with a blank line under it,
        so text and the interactive widgets below are always separated. */
     .sub { color: $text-muted; margin-bottom: 1; }
@@ -114,7 +126,31 @@ class SetupApp(App):
     RadioSet { height: auto; width: 1fr; }
     #toosmall { display: none; padding: 2 4; text-align: center; }
     """
-    BINDINGS = [Binding("ctrl+q", "quit", "Quit", priority=True)]
+
+
+class CardScreen(Screen):
+    """Base for every screen: keeps the fixed blue #card, and shows a shared
+    'terminal too small' note (instead of the card) when the window is below
+    MIN_W×MIN_H — so no screen ever scrolls or clips. Subclasses must compose a
+    `#card` and a `Static(TOO_SMALL, id="toosmall")`."""
+
+    def on_resize(self, _event) -> None:
+        self._check_size()
+
+    def _check_size(self) -> None:
+        small = self.size.width < MIN_W or self.size.height < MIN_H
+        try:
+            self.query_one("#card").display = not small
+            self.query_one("#toosmall").display = small
+        except NoMatches:
+            pass
+
+
+class WizardScreen(CardScreen):
+    """The setup steps as a screen, so both `wcob setup` (SetupApp below) and the
+    unified `wcob app` (tui.WcobApp) host it. On finish it writes config.toml /
+    settings.toml / secrets.env itself and dismisses; `completed` + `backend` /
+    `keys` / `model` are read by whoever hosted it."""
 
     def __init__(self):
         super().__init__()
@@ -134,8 +170,7 @@ class SetupApp(App):
             with Horizontal(id="nav"):
                 yield Button("← Back", id="back")
                 yield Button("Next →", id="next", variant="primary")
-        yield Static(f"Terminal too small.\nResize to at least {MIN_W}×{MIN_H} and it'll come back.",
-                     id="toosmall")
+        yield Static(TOO_SMALL, id="toosmall")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -144,14 +179,6 @@ class SetupApp(App):
                      if v["key_env"] and secrets.get(v["key_env"])}
         self._check_size()
         await self.render_step()
-
-    def on_resize(self, _event) -> None:
-        self._check_size()
-
-    def _check_size(self) -> None:
-        small = self.size.width < MIN_W or self.size.height < MIN_H
-        self.query_one("#card").display = not small
-        self.query_one("#toosmall").display = small
 
     # -- step navigation ---------------------------------------------------- #
     def _next_of(self, step):
@@ -176,14 +203,9 @@ class SetupApp(App):
             self._refresh_dirs(self.vault)  # populate the folder preview
         self.query_one("#back", Button).display = self._prev_of(self.step) is not None
         self.query_one("#next", Button).label = "Finish" if self.step == "done" else "Next →"
-        # Focus the step's main control (not the nav button we just clicked), so
-        # nothing on the card sits there with the focused-highlight by default.
-        for w in body.children:
-            if w.focusable:
-                w.focus()
-                break
-        else:
-            self.query_one("#next", Button).focus()
+        # No auto-focus on step render: focusing the vault path Input meant a
+        # stray keystroke wiped it. Nothing is focused until the user clicks/tabs
+        # to it (App.AUTO_FOCUS = None disables the on-mount focus too).
 
     def _build_backend(self) -> list:
         return [
@@ -257,11 +279,10 @@ class SetupApp(App):
         ]
 
     def _build_done(self) -> list:
-        cmd = "run-api" if self.backend == "api" else "run-claude"
         return [
-            Static(f"Model and vault are saved.\n\nAfter you finish, this wizard installs "
-                   "anything missing and runs the WeChat QR pairing in the terminal. Then "
-                   f"start the bot with:  wcob {cmd}", classes="sub"),
+            Static("Your model and vault are saved.\n\nNext, scan the QR code to "
+                   "pair with WeChat — then the bot starts, right here.",
+                   classes="sub"),
         ]
 
     # -- actions ------------------------------------------------------------ #
@@ -289,7 +310,7 @@ class SetupApp(App):
             prov = self.query_one("#mprov", Select).value
             name = self.query_one("#mname", Select).value
             if not name:
-                self.notify("Pick a model", severity="error")
+                self.app.notify("Pick a model", severity="error")
                 return
             self.model = f"{prov}:{name}"
         elif self.step == "vaultkind":
@@ -311,7 +332,7 @@ class SetupApp(App):
                 settings.set_value("api_model", self.model)
         elif self.step == "done":
             self.completed = True
-            self.exit()
+            self.dismiss()
             return
         self.step = self._next_of(self.step)
         await self.render_step()
@@ -344,7 +365,8 @@ class SetupApp(App):
             return
         inp = self.query_one("#vault", Input)
         inp.value = chosen.rstrip("/") + "/"   # trailing slash -> browse into it
-        inp.focus()
+        # Deliberately do NOT focus the input here — focusing it made a stray
+        # keystroke wipe the path the user just picked.
         self._refresh_dirs(inp.value)
 
     def _test(self) -> None:
@@ -359,7 +381,7 @@ class SetupApp(App):
     @work(thread=True)
     def _validate(self, prov: str, key: str) -> None:
         ok, msg = validate(prov, key)
-        self.call_from_thread(self._result, prov, key, ok, msg)
+        self.app.call_from_thread(self._result, prov, key, ok, msg)
 
     def _result(self, prov, key, ok, msg) -> None:
         m = self.query_one("#msg", Static)
@@ -370,6 +392,23 @@ class SetupApp(App):
             self.query_one("#key", Input).value = ""
         else:
             m.update(f"[red]✗ {msg}[/]")
+
+
+class SetupApp(App):
+    """Standalone `wcob setup`: just the wizard. Hosts one WizardScreen and
+    exits when it's done; main() then finishes (install extras, pair). The
+    unified `wcob app` uses WizardScreen directly instead of this shell."""
+
+    CSS = WIZARD_CSS
+    BINDINGS = [Binding("ctrl+q", "quit", "Quit", priority=True)]
+    AUTO_FOCUS = None  # never auto-focus a widget (keeps stray keys off the path field)
+
+    def __init__(self):
+        super().__init__()
+        self.wizard = WizardScreen()  # main() reads .completed/.backend/.keys/.model
+
+    def on_mount(self) -> None:
+        self.push_screen(self.wizard, lambda _: self.exit())
 
 
 # --------------------------------------------------------------------------- #
@@ -386,16 +425,16 @@ def _install_missing(keyed) -> None:
                    cwd=str(REPO), check=False)
 
 
-def _emit_result(path: str, app: "SetupApp") -> None:
+def _emit_result(path: str, w: "WizardScreen") -> None:
     """Write the wizard's choices for setup.sh to read back — which backend to
     install extras for, the keyed providers, and the API model. The wizard has
     already written config.toml, settings.toml, and secrets.env itself; setup.sh
     only needs this to finish the bootstrap (backend extras, Claude CLI, pairing)."""
     lines = [
-        f"backend={app.backend}",
-        f"run_subcmd={'run-api' if app.backend == 'api' else 'run-claude'}",
-        f"providers={','.join(app.keys)}",
-        f"api_model={app.model if app.backend == 'api' else ''}",
+        f"backend={w.backend}",
+        f"run_subcmd={'run-api' if w.backend == 'api' else 'run-claude'}",
+        f"providers={','.join(w.keys)}",
+        f"api_model={w.model if w.backend == 'api' else ''}",
     ]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -409,18 +448,19 @@ def main() -> None:
 
     app = SetupApp()
     app.run()
-    if not app.completed:
+    w = app.wizard
+    if not w.completed:
         print("Setup cancelled — nothing was changed beyond any keys you saved.")
         sys.exit(1 if result_path else 0)
 
     if result_path:
-        _emit_result(result_path, app)
+        _emit_result(result_path, w)
         return
 
-    if app.backend == "api":
-        _install_missing(list(app.keys))
+    if w.backend == "api":
+        _install_missing(list(w.keys))
 
-    run_cmd = "run-api" if app.backend == "api" else "run-claude"
+    run_cmd = "run-api" if w.backend == "api" else "run-claude"
     if CREDS.is_file():
         print(f"\nAlready paired with WeChat ({CREDS}).")
     else:

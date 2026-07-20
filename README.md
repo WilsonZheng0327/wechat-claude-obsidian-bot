@@ -46,12 +46,37 @@ How a message travels:
 - A mainland-China (+86) WeChat account with the 微信ClawBot plugin
   (设置 → 插件 → 微信ClawBot; gray release, iOS ≥ 8.0.70 / Android ≥ 8.0.68).
   International WeChat is not supported by Tencent yet.
-- Python ≥ 3.11.
+- Python ≥ 3.11 — *except* via the double-click launcher below, which installs
+  its own Python (through `uv`), so you need nothing preinstalled.
 - **A model.** Either the [Claude Code CLI](https://code.claude.com)
   (subscription login or `ANTHROPIC_API_KEY`) — the default — *or* an API key
   for any other provider (OpenAI, Gemini, …). You pick during setup.
 
 ## Setup
+
+### Easiest — double-click, no terminal (macOS / Windows)
+
+For a hands-off setup with nothing preinstalled — not even Python — download
+this repo as a ZIP (green **Code → Download ZIP**), unzip it, and double-click
+**`launch_wcob.command`** (macOS) or **`launch_wcob.bat`** (Windows). The first
+launch installs [`uv`](https://docs.astral.sh/uv/) (which brings its own
+Python), then everything happens in that one window: a setup wizard (paste an
+API key — tested live — pick a model, choose or create a vault), the WeChat QR
+pairing shown **right in the window**, and a live dashboard of the running bot.
+Keep the window open while you use the bot; closing it stops it.
+
+- First launch only: macOS may say "unidentified developer" → right-click the
+  file → **Open**; Windows SmartScreen → **More info → Run anyway**.
+- This path uses the API backend (bring your own provider key) — you never type
+  a command.
+
+Under the hood the launcher runs `uv run --extra app wcob app`. **`wcob app`**
+is a single Textual app that chains setup → pairing → live dashboard, skipping
+whatever's already done; **`wcob start`** is the same flow in plain terminal
+phases (no dashboard), as a fallback. `uv.lock` pins the exact dependency
+versions so every launch installs the same thing.
+
+### Guided installer (developers)
 
 The quick way — clone and run the guided installer. It creates `./.venv`,
 installs the Claude CLI if you pick Claude, then opens a **full-screen setup

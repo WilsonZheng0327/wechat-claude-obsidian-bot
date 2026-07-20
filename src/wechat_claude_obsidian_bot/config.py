@@ -149,6 +149,14 @@ VAULT = _path_setting("WCOB_VAULT", "vault", None)
 CREDS = _path_setting("WCOB_CREDS", "creds", _default_creds)
 PROMPT = _path_setting("WCOB_PROMPT", "prompt", CONFIG_DIR / "prompt.md")
 SETTINGS = _path_setting("WCOB_SETTINGS", "settings", CONFIG_DIR / "settings.toml")
+# The API backend's provider key(s). Not a setting (no env/config override): in a
+# checkout it sits at the repo base for hand-editability + gitignore; otherwise
+# beside creds.json. This is THE path — the api backend, the setup wizard, and
+# `wcob start`'s gate all import it, so the file the wizard writes is the file the
+# backend reads (they used to compute it separately and disagreed when REPO was
+# None). Its safety from the Claude agent comes from the PreToolUse hook, not its
+# location. Keep it out of the agent's reach regardless.
+SECRETS = (REPO / "secrets.env") if REPO else (CREDS.parent / "secrets.env")
 # Scheduled-tasks store (schedules.py). In CONFIG_DIR beside settings.toml — so
 # it's in the checkout — but it's runtime state, not a setting (no env/config
 # override), and it's gitignored. The PreToolUse hook still denies the agent's

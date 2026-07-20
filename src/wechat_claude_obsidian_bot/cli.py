@@ -6,6 +6,11 @@ USAGE = """\
 usage: wcob [command]
 
 commands:
+  app          the whole thing in one Textual window: setup (if needed) → pair
+               with the QR shown in-app → a live dashboard running the bot.
+               What the double-click launcher calls. --claude for Claude.
+  start        same flow as `app` but plain-terminal phases (no TUI dashboard);
+               a fallback for when the TUI can't run. --claude for Claude.
   setup        full-screen terminal wizard (model, API keys, vault)
   run-claude   start the bot on the Claude Code CLI (needs the `claude` CLI)
   run-api      start the bot on any model via an API key (deepagents)
@@ -57,6 +62,14 @@ def main() -> None:
         runner = _run_claude
     elif cmd == "run-api":
         runner = _run_api
+    elif cmd == "start":
+        from .start import main as runner
+    elif cmd == "app":
+        try:
+            from .tui import main as runner
+        except ImportError as err:
+            sys.exit(f"wcob app: the TUI needs the gui extra ({err}).\n"
+                     "Install it with:  pip install '.[gui]'  (or run `wcob start`).")
     elif cmd == "setup":
         try:
             from .setup_tui import main as runner

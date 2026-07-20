@@ -23,7 +23,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .. import runlog, settings
-from ..config import CREDS, REPO
+from ..config import CREDS, SECRETS
 from ..prompting import capture_prompt
 from ..providers import PROVIDERS
 from . import api_tools
@@ -35,7 +35,7 @@ PROVIDER_KEYS = {p: v["key_env"] for p, v in PROVIDERS.items()}
 
 
 def _secrets_path():
-    return (REPO / "secrets.env") if REPO else (CREDS.parent / "secrets.env")
+    return SECRETS  # single source of truth in config.py
 
 
 def _providers_present() -> tuple[list[str], list[str]]:

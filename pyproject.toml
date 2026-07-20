@@ -37,6 +37,12 @@ api-openai = ["langchain-openai"]
 api-google = ["langchain-google-genai"]
 api-anthropic = ["langchain-anthropic"]
 gui = ["textual>=8"]                # `wcob setup` terminal wizard
+# The whole bring-your-own-key app in one extra — the API backend, every
+# provider integration, and the setup wizard. This is what the double-click
+# launcher (launch_wcob.command / launch_wcob.bat) installs via `uv run
+# --extra app`, so a non-technical user needs no backend/provider choices at
+# install time. Self-referential so it can't drift from the pieces above.
+app = ["wechat-claude-obsidian-bot[api,api-openai,api-anthropic,api-google,gui]"]
 
 [project.urls]
 Repository = "https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
