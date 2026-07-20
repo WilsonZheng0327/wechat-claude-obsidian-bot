@@ -37,12 +37,15 @@ api-openai = ["langchain-openai"]
 api-google = ["langchain-google-genai"]
 api-anthropic = ["langchain-anthropic"]
 gui = ["textual>=8"]                # `wcob setup` terminal wizard
+# Incoming PDF/Office docs -> Markdown at ingestion (document_in.py), so either
+# backend can read them. Keep the format list in sync with document_in.CONVERTIBLE.
+docs = ["markitdown[pdf,docx,pptx,xlsx]>=0.1"]
 # The whole bring-your-own-key app in one extra — the API backend, every
-# provider integration, and the setup wizard. This is what the double-click
-# launcher (launch_wcob.command / launch_wcob.bat) installs via `uv run
-# --extra app`, so a non-technical user needs no backend/provider choices at
-# install time. Self-referential so it can't drift from the pieces above.
-app = ["wechat-claude-obsidian-bot[api,api-openai,api-anthropic,api-google,gui]"]
+# provider integration, the setup wizard, and document ingestion. This is what
+# the double-click launcher (launch_wcob.command / launch_wcob.bat) installs via
+# `uv run --extra app`, so a non-technical user needs no backend/provider choices
+# at install time. Self-referential so it can't drift from the pieces above.
+app = ["wechat-claude-obsidian-bot[api,api-openai,api-anthropic,api-google,gui,docs]"]
 
 [project.urls]
 Repository = "https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"

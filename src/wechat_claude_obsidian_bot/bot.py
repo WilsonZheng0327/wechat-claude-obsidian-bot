@@ -19,6 +19,7 @@ from weixin_ilink import WeixinBot
 
 from . import commands, contacts, scheduler, session, settings
 from .config import CREDS, MAX_MEDIA_MB, require_creds, require_vault
+from .document_in import extract_markdown
 from .media_in import MediaTooLarge, save_file, save_image
 from .prompting import capture_prompt
 from .settings import tr
@@ -236,8 +237,18 @@ def main(backend) -> None:
     def on_file(msg):
         seen(msg)
         path = save_media(msg, save_file, "file")
-        if path:
-            handle(msg, f"(file message, saved in the vault at {path.relative_to(vault)}) "
+        if not path:
+            return
+        rel = path.relative_to(vault)
+        # PDFs / Office docs -> a Markdown sibling any backend can read.
+        extracted = extract_markdown(path)
+        if extracted:
+            erel = extracted.relative_to(vault)
+            handle(msg, f"(file message: {rel} — a document; its text was extracted "
+                        f"to {erel}) Read {erel} (the original is also at {rel}) and "
+                        "capture it per your instructions.")
+        else:
+            handle(msg, f"(file message, saved in the vault at {rel}) "
                         "Read it if you can and capture it per your instructions.")
 
     @bot.on_video

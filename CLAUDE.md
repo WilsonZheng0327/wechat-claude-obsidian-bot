@@ -49,8 +49,14 @@ calls `backend.run_turn()`, and replies. Media handlers download into
 `<vault>/Wechat_Saved/` *first*
 ([media_in.py](src/wechat_claude_obsidian_bot/media_in.py)) and then hand the
 agent a vault-relative path to `Read` — the agent never touches WeChat's
-download API. Messages are handled sequentially; anything arriving mid-run is
-picked up on the next poll via the iLink cursor.
+download API. For a PDF/Office file the `on_file` handler then extracts a
+Markdown sibling via
+[document_in.py](src/wechat_claude_obsidian_bot/document_in.py) (MarkItDown, the
+`docs` extra) and points the agent at *that* — so `.docx`/`.xlsx`/`.pptx` and
+PDFs are readable on both backends, not just the Claude `Read`. Best-effort: no
+`docs` extra or a bad file → it falls back to the original path. Messages are
+handled sequentially; anything arriving mid-run is picked up on the next poll
+via the iLink cursor.
 
 ### Backends — the one provider-specific seam
 

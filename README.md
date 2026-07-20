@@ -98,12 +98,13 @@ extra for the one you want (and, for the API backend, your provider):
 
 ```sh
 # Claude backend — also install the `claude` CLI: https://code.claude.com
-pipx install "wechat-claude-obsidian-bot[claude] @ git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
+pipx install "wechat-claude-obsidian-bot[claude,docs] @ git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
 
 # API backend — add your provider extra: api-openai / api-google / api-anthropic
-pipx install "wechat-claude-obsidian-bot[api,api-openai] @ git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
+pipx install "wechat-claude-obsidian-bot[api,api-openai,docs] @ git+https://github.com/WilsonZheng0327/wechat-claude-obsidian-bot"
 
-# from a checkout, same extras:  pip install '.[claude]'  or  pip install '.[api,api-openai]'
+# `docs` adds PDF/Office (.docx/.xlsx/.pptx) ingestion; drop it to stay lean.
+# from a checkout, same extras:  pip install '.[claude,docs]'  or  pip install '.[api,api-openai,docs]'
 ```
 
 Then point it at your vault. The first `wcob run-*` with no vault set writes
@@ -146,6 +147,7 @@ anyone with that file can act as your bot — keep it private.
 | "teach me X" | A short lesson built on your existing notes, then captures it as notes. |
 | Voice | Same, from WeChat's own transcript. If WeChat sends none, the bot asks you to type it — it doesn't transcribe audio itself. |
 | Image / file | Saves it in `<vault>/Wechat_Saved/`, views/reads it, writes a note embedding it. Media over `max_media_mb` (default 50) is refused. |
+| A document (PDF, `.docx`, `.xlsx`, `.pptx`) | Saved, then its text is extracted to a Markdown sibling (via MarkItDown) that either backend reads — so Office files and PDFs are captured, not just plain text. Needs the `docs` extra (bundled in the launcher's `app` extra; add `[docs]` to a manual install). |
 | Video | Declined — the agent can't watch them. |
 
 **Follow-ups work.** Messages within `session_window_minutes` of the last

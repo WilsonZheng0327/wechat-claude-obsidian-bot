@@ -87,13 +87,14 @@ rm -f "$RESULT"
 echo "OK: $BACKEND backend configured"
 
 # --- 4. install the chosen backend ------------------------------------------
-# gui stays in the extras so `wcob setup` remains runnable later; the backend
-# extra (and, for api, one LangChain integration per keyed provider so /model
-# can switch among them without a reinstall) is added on top.
+# gui stays in the extras so `wcob setup` remains runnable later; docs adds
+# PDF/Office ingestion (both backends); the backend extra (and, for api, one
+# LangChain integration per keyed provider so /model can switch among them
+# without a reinstall) is added on top.
 if [ "$BACKEND" = claude ]; then
-    EXTRAS="[gui,claude]"
+    EXTRAS="[gui,docs,claude]"
 else
-    EXTRAS="[gui,api"
+    EXTRAS="[gui,docs,api"
     for p in $(printf '%s' "$KEY_PROVIDERS" | tr ',' ' '); do
         case "$p" in
             openai)       EXTRAS="$EXTRAS,api-openai" ;;
